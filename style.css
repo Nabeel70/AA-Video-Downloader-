@@ -43,7 +43,28 @@ nav a {
         font-weight:700;
         margin:0;
         color:#ffffff !important;
-        text-shadow:0 0 3px #000, 0 0 6px rgba(0,0,0,0.6);
+    text-shadow:0 2px 4px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.6);
+    position:relative;
+}
+.site-title:before {
+    content:"";
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:105%;
+    height:140%;
+    background:rgba(0,0,0,0.25);
+    filter:blur(18px);
+    z-index:-1;
+    border-radius:8px;
+}
+/* Logo styling with stronger shadow */
+.site-logo {
+    width:60px; height:60px; border-radius:15px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.6), 0 0 10px rgba(0,0,0,0.4);
+    background:#fff; /* ensures shadow visibility */
+    padding:3px;
 }
 @media (max-width: 992px){
     .site-title {font-size:20px; padding-left:10px; padding-right:10px;}
