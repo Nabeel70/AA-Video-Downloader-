@@ -1,0 +1,10 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/workspaces/AA-Video-Downloader-']
+ERROR:    [Errno 98] Address already in use
+🚀 Starting Video Download API with yt-dlp
+📍 Endpoints:
+   - http://localhost:8000/info?url=VIDEO_URL
+   - http://localhost:8000/download?url=VIDEO_URL&quality=720p
+   - http://localhost:8000/stream?url=VIDEO_URL&quality=best
+
+✅ FastAPI + yt-dlp backend ready!
