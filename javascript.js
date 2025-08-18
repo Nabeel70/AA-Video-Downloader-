@@ -178,32 +178,28 @@ function makeRequest(inputUrl, retries = 3) {
     // Try multiple API endpoints for better reliability
     const apiEndpoints = [
         {
+            name: "Our Backend Server",
+            url: `http://localhost:8002/video-info?url=${encodeURIComponent(inputUrl)}`,
+            method: "GET",
+            priority: 1
+        },
+        {
             name: "Local Python Backend",
             url: `http://localhost:8001/video-info?url=${encodeURIComponent(inputUrl)}`,
             method: "GET",
-            priority: 1
+            priority: 2
         },
         {
             name: "VKR Downloader",
             url: `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`,
             method: "GET",
-            priority: 2
+            priority: 3
         },
         {
             name: "Alternative VKR API", 
             url: `https://api.vkrdownloader.com/v1/extract?url=${encodeURIComponent(inputUrl)}`,
             method: "GET",
-            priority: 3
-        },
-        {
-            name: "RapidAPI Video Download",
-            url: `https://youtube-mp36.p.rapidapi.com/dl?id=${getYouTubeVideoIds(inputUrl)}`,
-            method: "GET", 
-            priority: 4,
-            headers: {
-                'X-RapidAPI-Key': 'YOUR_RAPIDAPI_KEY_HERE',
-                'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
-            }
+            priority: 4
         }
     ];`/`
     
@@ -371,7 +367,7 @@ function forceShowDownloadInterface(inputUrl) {
 }
 
 /**
- * Direct download function that works without APIs
+ * Direct download function that gets actual file URLs from our backend
  * @param {string} url - Encoded video URL
  * @param {string} quality - Quality (mp3, 720, 1080, best)
  */
@@ -381,33 +377,173 @@ function directDownloadFile(url, quality) {
     // Show a brief loading message
     const btn = event.target;
     const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Starting...';
+    btn.innerHTML = '⏳ Getting file...';
     btn.disabled = true;
     
-    // Create direct download URL
-    const downloadUrl = `https://vkrdownloader.xyz/download.php?vkr=${url}&q=${quality}`;
+    // Try our backend first
+    const ourBackendUrl = `http://localhost:8002/download?url=${url}&quality=${quality}`;
     
-    // Open in new window/tab
-    const newWindow = window.open(downloadUrl, '_blank');
-    
-    // Reset button after 2 seconds
-    setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        
-        // Show success message
-        if (newWindow) {
-            btn.innerHTML = '✅ Opened!';
+    fetch(ourBackendUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Our Backend Response:', data);
+            
+            if (data && data.success && data.download_url) {
+                // Got direct file URL from our backend
+                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                btn.innerHTML = '✅ Downloaded!';
+            } else if (data && data.alternative_urls && data.alternative_urls.length > 0) {
+                // Try alternative URLs from our backend
+                tryMultipleDownloadUrls(data.alternative_urls, quality, btn, originalText);
+                return;
+            } else {
+                // Our backend failed - try VKR API
+                console.log('Our backend failed, trying VKR API...');
+                tryVKRDirectDownload(url, quality, btn, originalText);
+                return;
+            }
+            
+            // Reset button after 3 seconds
             setTimeout(() => {
                 btn.innerHTML = originalText;
-            }, 2000);
-        } else {
-            btn.innerHTML = '❌ Blocked';
+                btn.disabled = false;
+            }, 3000);
+        })
+        .catch(error => {
+            console.log('Our backend failed, trying VKR API...', error);
+            tryVKRDirectDownload(url, quality, btn, originalText);
+        });
+}
+
+/**
+ * Try multiple download URLs in sequence
+ * @param {Array} urls - Array of download URLs
+ * @param {string} quality - Quality
+ * @param {HTMLElement} btn - Button element
+ * @param {string} originalText - Original button text
+ */
+function tryMultipleDownloadUrls(urls, quality, btn, originalText) {
+    let urlIndex = 0;
+    
+    function tryNext() {
+        if (urlIndex >= urls.length) {
+            btn.innerHTML = '❌ Failed';
             setTimeout(() => {
                 btn.innerHTML = originalText;
-            }, 2000);
+                btn.disabled = false;
+            }, 3000);
+            return;
         }
-    }, 1000);
+        
+        const url = urls[urlIndex];
+        urlIndex++;
+        
+        // Try to download from this URL
+        fetch(url, { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    triggerDirectDownload(url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                    btn.innerHTML = '✅ Downloaded!';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }, 3000);
+                } else {
+                    tryNext();
+                }
+            })
+            .catch(() => {
+                // If HEAD request fails, just try the download anyway
+                triggerDirectDownload(url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                btn.innerHTML = '✅ Downloading...';
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 3000);
+            });
+    }
+    
+    tryNext();
+}
+
+/**
+ * Try VKR direct download as fallback
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality
+ * @param {HTMLElement} btn - Button element
+ * @param {string} originalText - Original button text
+ */
+function tryVKRDirectDownload(url, quality, btn, originalText) {
+    // Get actual download URL from VKR API (not their redirect page)
+    const apiUrl = `https://vkrdownloader.xyz/server/api.php?vkr=${url}&q=${quality}`;
+    
+    fetch(apiUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log('VKR API Response:', data);
+            
+            if (data && data.success && data.download_url) {
+                // Got direct file URL - trigger download
+                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                btn.innerHTML = '✅ Downloaded!';
+            } else if (data && data.url) {
+                // Alternative response format
+                triggerDirectDownload(data.url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                btn.innerHTML = '✅ Downloaded!';
+            } else {
+                // VKR API failed - try direct file endpoint
+                console.log('VKR API failed, trying direct file endpoint...');
+                tryDirectFileDownload(url, quality, btn, originalText);
+                return;
+            }
+            
+            // Reset button after 3 seconds
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 3000);
+        })
+        .catch(error => {
+            console.log('VKR API failed, trying direct file endpoint...', error);
+            tryDirectFileDownload(url, quality, btn, originalText);
+        });
+}
+
+/**
+ * Try direct file download without redirect pages
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality
+ * @param {HTMLElement} btn - Button element
+ * @param {string} originalText - Original button text
+ */
+function tryDirectFileDownload(url, quality, btn, originalText) {
+    // Try VKR direct file endpoint with force parameter
+    const directFileUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${url}&q=${quality}&direct=1&force=1`;
+    
+    // Create hidden iframe for download
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = directFileUrl;
+    
+    iframe.onload = function() {
+        btn.innerHTML = '✅ Downloading...';
+        setTimeout(() => {
+            document.body.removeChild(iframe);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 3000);
+    };
+    
+    iframe.onerror = function() {
+        btn.innerHTML = '❌ Failed';
+        document.body.removeChild(iframe);
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 3000);
+    };
+    
+    document.body.appendChild(iframe);
 }
 
 /**
@@ -925,23 +1061,71 @@ function downloadVideoInSite(url, quality, format = 'video') {
     // Decode URL if it's encoded
     const actualUrl = decodeURIComponent(url);
     
-    // Create direct download URL that should work
-    const downloadUrl = `https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(actualUrl)}&q=${quality}`;
+    // Try our backend first
+    const ourBackendUrl = `http://localhost:8002/download?url=${encodeURIComponent(actualUrl)}&quality=${quality}`;
     
-    // Try direct window open first (most reliable)
-    console.log("Attempting direct download window...");
-    const newWindow = window.open(downloadUrl, '_blank');
+    fetch(ourBackendUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Our Backend Download Response:', data);
+            
+            if (data && data.success && data.download_url) {
+                // Got direct file URL from our backend
+                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                hideDownloadProgress();
+                showDownloadSuccess(quality, format);
+            } else if (data && data.alternative_urls && data.alternative_urls.length > 0) {
+                // Try alternative URLs from our backend
+                triggerDirectDownload(data.alternative_urls[0], `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                hideDownloadProgress();
+                showDownloadSuccess(quality, format);
+            } else {
+                // Our backend failed - try VKR API
+                console.log("Our backend failed, trying VKR API...");
+                tryVKRApiDownload(actualUrl, quality, format);
+            }
+        })
+        .catch(error => {
+            console.log("Our backend failed, trying VKR API...", error);
+            tryVKRApiDownload(actualUrl, quality, format);
+        });
+}
+
+/**
+ * Try VKR API for download
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality
+ * @param {string} format - Format
+ */
+function tryVKRApiDownload(url, quality, format) {
+    // Try to get direct download URL from VKR API (not their download page)
+    const apiUrl = `https://vkrdownloader.xyz/server/api.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
     
-    if (newWindow) {
-        // Success - window opened
-        hideDownloadProgress();
-        showDownloadSuccess(quality, format);
-        console.log("Direct download window opened successfully");
-    } else {
-        // Popup blocked - try alternative method
-        console.log("Popup blocked, trying alternative method...");
-        tryAlternativeDownload(actualUrl, quality, format);
-    }
+    fetch(apiUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log('VKR Download API Response:', data);
+            
+            if (data && data.success && data.download_url) {
+                // Got direct file URL
+                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                hideDownloadProgress();
+                showDownloadSuccess(quality, format);
+            } else if (data && data.url) {
+                // Alternative response format
+                triggerDirectDownload(data.url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                hideDownloadProgress();
+                showDownloadSuccess(quality, format);
+            } else {
+                // VKR API didn't return direct URL - try alternative
+                console.log("VKR API failed, trying alternative method...");
+                tryAlternativeDownload(url, quality, format);
+            }
+        })
+        .catch(error => {
+            console.log("VKR API fetch failed, trying alternative method...", error);
+            tryAlternativeDownload(url, quality, format);
+        });
 }
 
 /**
@@ -1051,30 +1235,51 @@ function downloadBlob(blob, filename) {
 }
 
 /**
- * Try alternative download method that stays in-site
+ * Try alternative download method that gets direct file URLs
  * @param {string} url - Video URL
  * @param {string} quality - Quality
  * @param {string} format - Format
  */
 function tryAlternativeDownload(url, quality, format) {
-    console.log("Using alternative in-site download method...");
+    console.log("Using alternative direct file download...");
     
-    // Method 1: Try creating a download link
-    const downloadUrl = `https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.target = '_blank';
-    link.download = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
-    link.style.display = 'none';
+    // Try VKR direct file download endpoint
+    const directFileUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}&direct=1`;
     
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Create hidden iframe for file download
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = directFileUrl;
     
-    hideDownloadProgress();
-    showDownloadSuccess(quality, format);
+    iframe.onload = function() {
+        hideDownloadProgress();
+        showDownloadSuccess(quality, format);
+        console.log("Alternative download iframe loaded");
+        
+        // Remove iframe after download
+        setTimeout(() => {
+            if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+            }
+        }, 5000);
+    };
     
-    console.log("Alternative download method executed");
+    iframe.onerror = function() {
+        console.log("Alternative download failed, trying final fallback...");
+        // Final fallback - direct file link
+        const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
+        const fallbackUrl = `https://vkrdownloader.xyz/server/force.php?vkr=${encodeURIComponent(url)}&q=${quality}&f=${filename}`;
+        
+        triggerDirectDownload(fallbackUrl, filename);
+        hideDownloadProgress();
+        showDownloadSuccess(quality, format);
+        
+        if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+        }
+    };
+    
+    document.body.appendChild(iframe);
 }
 
 /**
