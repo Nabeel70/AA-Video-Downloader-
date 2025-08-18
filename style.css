@@ -72,19 +72,24 @@ footer.footer_v2 {
         margin:0 auto;
         padding:0 20px;
         display:grid;
-        grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-        gap:30px 40px;
+    grid-template-columns:repeat(6,minmax(130px,1fr));
+    gap:24px 32px;
 }
 .footer_v2 .footer-col ul {list-style:none; margin:0; padding:0;}
 .footer_v2 .footer-col li {margin-bottom:6px;}
 .footer_v2 .footer-col a {text-decoration:none; color:#222;}
 .footer_v2 .footer-col a:hover {text-decoration:underline;}
-.footer_v2 .brand {grid-column: span 2;}
+.footer_v2 .brand {grid-column:auto;}
 .footer_v2 .footer-logo {max-width:160px; height:auto; display:block; margin:0 0 12px;}
 .footer_v2 .copyright {color:#666; margin:0;}
+/* Responsive footer breakpoints */
+@media (max-width:1000px){
+    .footer_v2 .wrapper.footer-grid {grid-template-columns:repeat(3,minmax(140px,1fr));}
+}
 @media (max-width:700px){
-    .footer_v2 .brand {grid-column: span 1;}
+    .footer_v2 .wrapper.footer-grid {grid-template-columns:repeat(2,minmax(140px,1fr));}
     .footer_v2 {text-align:left;}
+}
 /* (Removed stray malformed wave rules that caused overlap) */
 
 @keyframes wave {
