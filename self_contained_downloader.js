@@ -41,6 +41,13 @@ class SelfContainedDownloader {
      * Test if our backend is available
      */
     async testBackend() {
+        // Skip backend test on production - use client-side only
+        if (!this.isLocalhost) {
+            console.log('🌐 Production mode - using client-side processing only');
+            this.enableFallbackMode();
+            return;
+        }
+
         try {
             const response = await fetch(`${this.backendUrl}/health`);
             if (response.ok) {
@@ -61,7 +68,12 @@ class SelfContainedDownloader {
      */
     enableFallbackMode() {
         this.backendAvailable = false;
-        this.showNotification('Using client-side processing mode', 'info');
+        if (!this.isLocalhost) {
+            // Don't show notification on production - it's expected
+            console.log('🎯 Client-side processing mode active');
+        } else {
+            this.showNotification('Using client-side processing mode', 'info');
+        }
     }
 
     /**
@@ -375,17 +387,26 @@ class SelfContainedDownloader {
             {
                 name: 'Y2Mate',
                 url: `https://www.y2mate.com/youtube/${videoId}`,
-                description: 'Popular YouTube downloader'
+                description: 'Most popular YouTube downloader',
+                icon: '🎬'
             },
             {
-                name: 'SaveFrom',
+                name: 'SaveFrom.net',
                 url: `https://savefrom.net/#url=${encodeURIComponent(url)}`,
-                description: 'Universal video downloader'
+                description: 'Universal video downloader',
+                icon: '💾'
             },
             {
-                name: 'KeepVid',
-                url: `https://keepvid.com/?url=${encodeURIComponent(url)}`,
-                description: 'Multi-platform downloader'
+                name: 'YTmp3.cc',
+                url: `https://ytmp3.cc/youtube-to-mp3/${videoId}/`,
+                description: 'Specialized for audio downloads',
+                icon: '🎵'
+            },
+            {
+                name: 'OnlineVideoConverter',
+                url: `https://www.onlinevideoconverter.com/success?url=${encodeURIComponent(url)}`,
+                description: 'Multi-format converter',
+                icon: '🔄'
             }
         ];
 
@@ -399,25 +420,47 @@ class SelfContainedDownloader {
     showDownloadOptions(methods, quality) {
         const modalHtml = `
             <div class="modal fade" id="downloadModal" tabindex="-1">
-                <div class="modal-dialog">
+                <div class="modal-dialog modal-lg">
                     <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Download ${quality.toUpperCase()}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-download"></i> Download ${quality.toUpperCase()}
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <p>Choose a download service:</p>
-                            ${methods.map(method => `
-                                <div class="d-grid gap-2 mb-2">
-                                    <button class="btn btn-outline-primary" onclick="window.open('${method.url}', '_blank'); selfContainedDownloader.closeModal();">
-                                        <strong>${method.name}</strong><br>
-                                        <small>${method.description}</small>
-                                    </button>
-                                </div>
-                            `).join('')}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Choose a trusted download service:</strong> These are reliable, established platforms for video downloads.
+                            </div>
+                            <div class="row g-3">
+                                ${methods.map(method => `
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-primary">
+                                            <div class="card-body text-center">
+                                                <div class="display-4 mb-2">${method.icon}</div>
+                                                <h6 class="card-title">${method.name}</h6>
+                                                <p class="card-text small text-muted">${method.description}</p>
+                                                <button class="btn btn-primary w-100" 
+                                                        onclick="window.open('${method.url}', '_blank'); selfContainedDownloader.closeModal();">
+                                                    <i class="fas fa-external-link-alt"></i> Open ${method.name}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="alert alert-warning mt-3">
+                                <small>
+                                    <i class="fas fa-shield-alt"></i>
+                                    <strong>Safety tip:</strong> These services will open in new tabs. Allow popups if needed and always download from the official sites.
+                                </small>
+                            </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
                         </div>
                     </div>
                 </div>
