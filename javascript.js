@@ -248,6 +248,12 @@ function displayError(message) {
  * Handle the "Download" button click event.
  */
 document.getElementById("downloadBtn").addEventListener("click", debounce(function () {
+    // Clear any previous error messages
+    const errorContainer = document.getElementById("error");
+    if (errorContainer) {
+        errorContainer.style.display = "none";
+    }
+    
     document.getElementById("loading").style.display = "initial";
     document.getElementById("downloadBtn").disabled = true; // Disable the button
 
@@ -271,6 +277,10 @@ function displayError(message) {
     if (errorContainer) {
         errorContainer.innerHTML = sanitizeContent(message);
         errorContainer.style.display = "block";
+        
+        // Hide other containers when showing error
+        document.getElementById("container").style.display = "none";
+        document.getElementById("loading").style.display = "none";
     } else {
         // Fallback to alert if error container is not available
         alert(message);
