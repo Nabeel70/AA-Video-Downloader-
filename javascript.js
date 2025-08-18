@@ -205,7 +205,7 @@ function makeRequest(inputUrl, retries = 3) {
                 'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
             }
         }
-    ];
+    ];`/`
     
     const retryDelay = 1000;
     const maxRetries = retries;
@@ -482,30 +482,27 @@ function showComprehensiveFallback(inputUrl) {
     const downloadHtml = `
         <div class="row mb-3">
             <div class="col-md-3 mb-2">
-                <iframe style="border: 0; outline: none; width: 100%; height: 45px; margin-top: 10px; overflow: hidden;"   
-                        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-downloads-without-user-activation"  
-                        scrolling="no"
-                        src="https://vkrdownloader.xyz/server/dlbtn.php?q=mp3&vkr=${encodedUrl}">
-                </iframe>
+                <button onclick="downloadVideoInSite('${encodedUrl}', 'mp3', 'audio')" 
+                        class="btn btn-success w-100" style="height: 45px; margin-top: 10px;">
+                    🎵 Download MP3
+                </button>
             </div>
             <div class="col-md-3 mb-2">
-                <iframe style="border: 0; outline: none; width: 100%; height: 45px; margin-top: 10px; overflow: hidden;"   
-                        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-downloads-without-user-activation"  
-                        scrolling="no"
-                        src="https://vkrdownloader.xyz/server/dlbtn.php?q=720&vkr=${encodedUrl}">
-                </iframe>
-            </div>
-            <div class="col-md-3 mb-2">
-                <iframe style="border: 0; outline: none; width: 100%; height: 45px; margin-top: 10px; overflow: hidden;"   
-                        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-downloads-without-user-activation"  
-                        scrolling="no"
-                        src="https://vkrdownloader.xyz/server/dlbtn.php?q=1080&vkr=${encodedUrl}">
-                </iframe>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="window.open('https://vkrdownloader.xyz/download.php?vkr=${encodedUrl}', '_blank')" 
+                <button onclick="downloadVideoInSite('${encodedUrl}', '720', 'video')" 
                         class="btn btn-primary w-100" style="height: 45px; margin-top: 10px;">
-                    HD Download
+                    📹 Download 720p
+                </button>
+            </div>
+            <div class="col-md-3 mb-2">
+                <button onclick="downloadVideoInSite('${encodedUrl}', '1080', 'video')" 
+                        class="btn btn-info w-100" style="height: 45px; margin-top: 10px;">
+                    🎬 Download 1080p
+                </button>
+            </div>
+            <div class="col-md-3 mb-2">
+                <button onclick="downloadVideoInSite('${encodedUrl}', 'best', 'video')" 
+                        class="btn btn-warning w-100" style="height: 45px; margin-top: 10px;">
+                    ⭐ Best Quality
                 </button>
             </div>
         </div>
@@ -747,14 +744,19 @@ function generateDownloadButtons(videoData, inputUrl) {
         // Add YouTube specific buttons if applicable
         const videoId = getYouTubeVideoIds(videoSource);
         if (videoId) {
-            const qualities = ["mp3", "360", "720", "1080"];
-            qualities.forEach(quality => {
+            const qualities = [
+                { quality: "mp3", label: "🎵 MP3", color: "#28a745", format: "audio" },
+                { quality: "360", label: "📱 360p", color: "#17a2b8", format: "video" },
+                { quality: "720", label: "📹 720p", color: "#007bff", format: "video" },
+                { quality: "1080", label: "🎬 1080p", color: "#6f42c1", format: "video" }
+            ];
+            qualities.forEach(item => {
                 downloadContainer.innerHTML += `
-                    <iframe style="border: 0; outline: none; display:inline; min-width: 150px; max-height: 45px; height: 45px !important; margin-top: 10px; overflow: hidden;"   
-                            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-downloads-without-user-activation"  
-                            scrolling="no"
-                            src="https://vkrdownloader.xyz/server/dlbtn.php?q=${encodeURIComponent(quality)}&vkr=${encodeURIComponent(videoSource)}">
-                    </iframe>`;
+                    <button class="dlbtns" 
+                            style="background:${item.color}; margin: 5px;" 
+                            onclick="downloadVideoInSite('${videoSource}', '${item.quality}', '${item.format}')">
+                        ${item.label}
+                    </button>`;
             });
         }
         
@@ -768,9 +770,10 @@ function generateDownloadButtons(videoData, inputUrl) {
                     const videoExt = download.format_id || "mp4";
                     const videoSize = download.size || "Unknown";
 
-                    const redirectUrl = `https://vkrdownloader.xyz/forcedl?force=${encodeURIComponent(downloadUrl)}`;
                     downloadContainer.innerHTML += `
-                        <button class="dlbtns" style="background:${bgColor}" onclick="window.open('${redirectUrl}', '_blank')">
+                        <button class="dlbtns" 
+                                style="background:${bgColor}" 
+                                onclick="downloadVideoInSite('${inputUrl}', '${videoExt}', 'video')">
                             ${sanitizeContent(videoExt)} - ${sanitizeContent(videoSize)}
                         </button>`;
                 }
@@ -780,15 +783,177 @@ function generateDownloadButtons(videoData, inputUrl) {
         // Add fallback download button if no specific downloads available
         if (downloadContainer.innerHTML.trim() === "") {
             downloadContainer.innerHTML += `
-                <button class="dlbtns" style="background:#007bff" onclick="window.open('https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(inputUrl)}', '_blank')">
-                    Download Video (Fallback)
+                <button class="dlbtns" style="background:#007bff" onclick="downloadVideoInSite('${inputUrl}', 'best', 'video')">
+                    📥 Download Video
                 </button>`;
         }
     } else {
         // Fallback for when no data structure matches
         downloadContainer.innerHTML += `
-            <button class="dlbtns" style="background:#007bff" onclick="window.open('https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(inputUrl)}', '_blank')">
-                Download Video (External)
+            <button class="dlbtns" style="background:#007bff" onclick="downloadVideoInSite('${inputUrl}', 'mp4', 'video')">
+                Download Video
             </button>`;
     }
+}
+
+/**
+ * Download video directly within the site interface
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality (mp3, 720, 1080, etc.)
+ * @param {string} format - Format type (video/audio)
+ */
+function downloadVideoInSite(url, quality, format = 'video') {
+    console.log(`Starting ${format} download for quality: ${quality}`);
+    
+    // Show download progress
+    showDownloadProgress(quality, format);
+    
+    // Create download request
+    const downloadUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
+    
+    // Use fetch to get the actual download URL
+    fetch(`https://vkrdownloader.xyz/server/api.php?vkr=${encodeURIComponent(url)}&q=${quality}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.download_url) {
+                // Create hidden download link and trigger download
+                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                hideDownloadProgress();
+                showDownloadSuccess(quality, format);
+            } else {
+                // Fallback to iframe method but keep in site
+                createInSiteDownloadFrame(downloadUrl, quality, format);
+            }
+        })
+        .catch(error => {
+            console.log("API failed, using direct download method...");
+            // Use direct download method
+            triggerDirectDownload(downloadUrl, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+            hideDownloadProgress();
+        });
+}
+
+/**
+ * Trigger direct file download
+ * @param {string} downloadUrl - Direct download URL
+ * @param {string} filename - Suggested filename
+ */
+function triggerDirectDownload(downloadUrl, filename) {
+    // Create temporary download link
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    
+    // Add to DOM, click, and remove
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`Direct download triggered for: ${filename}`);
+}
+
+/**
+ * Create in-site download frame for fallback
+ * @param {string} downloadUrl - Download URL
+ * @param {string} quality - Quality
+ * @param {string} format - Format
+ */
+function createInSiteDownloadFrame(downloadUrl, quality, format) {
+    let downloadContainer = document.getElementById('download-progress');
+    if (!downloadContainer) {
+        downloadContainer = document.createElement('div');
+        downloadContainer.id = 'download-progress';
+        downloadContainer.className = 'mt-3';
+        document.getElementById('download').appendChild(downloadContainer);
+    }
+    
+    downloadContainer.innerHTML = `
+        <div class="alert alert-info">
+            <h5>📥 Preparing ${format === 'audio' ? 'Audio' : 'Video'} Download (${quality})</h5>
+            <p>Your download will start automatically...</p>
+            <div class="progress mb-2">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                     style="width: 100%"></div>
+            </div>
+            <iframe src="${downloadUrl}" 
+                    style="display: none;" 
+                    onload="downloadFrameLoaded('${quality}', '${format}')">
+            </iframe>
+        </div>
+    `;
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+        hideDownloadProgress();
+        showDownloadSuccess(quality, format);
+    }, 3000);
+}
+
+/**
+ * Show download progress indicator
+ * @param {string} quality - Quality being downloaded
+ * @param {string} format - Format being downloaded
+ */
+function showDownloadProgress(quality, format) {
+    let progressContainer = document.getElementById('download-progress');
+    if (!progressContainer) {
+        progressContainer = document.createElement('div');
+        progressContainer.id = 'download-progress';
+        progressContainer.className = 'mt-3';
+        document.getElementById('download').appendChild(progressContainer);
+    }
+    
+    progressContainer.innerHTML = `
+        <div class="alert alert-info">
+            <h5>🚀 Starting Download...</h5>
+            <p>Preparing ${format === 'audio' ? 'Audio' : 'Video'} file in ${quality.toUpperCase()} quality</p>
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                     style="width: 75%"></div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Hide download progress
+ */
+function hideDownloadProgress() {
+    const progressContainer = document.getElementById('download-progress');
+    if (progressContainer) {
+        progressContainer.innerHTML = '';
+    }
+}
+
+/**
+ * Show download success message
+ * @param {string} quality - Downloaded quality
+ * @param {string} format - Downloaded format
+ */
+function showDownloadSuccess(quality, format) {
+    const progressContainer = document.getElementById('download-progress');
+    if (progressContainer) {
+        progressContainer.innerHTML = `
+            <div class="alert alert-success">
+                <h5>✅ Download Started!</h5>
+                <p>Your ${format === 'audio' ? 'audio' : 'video'} file (${quality.toUpperCase()}) download has started. Check your downloads folder.</p>
+            </div>
+        `;
+        
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => {
+            hideDownloadProgress();
+        }, 5000);
+    }
+}
+
+/**
+ * Callback for when download frame loads
+ * @param {string} quality - Quality
+ * @param {string} format - Format
+ */
+function downloadFrameLoaded(quality, format) {
+    console.log(`Download frame loaded for ${quality} ${format}`);
+    // Frame loaded, download should have started
 }
