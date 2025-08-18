@@ -178,20 +178,20 @@ function makeRequest(inputUrl, retries = 3) {
     // Try multiple API endpoints for better reliability
     const apiEndpoints = [
         {
-            name: "Our Backend Server",
-            url: `http://localhost:8002/video-info?url=${encodeURIComponent(inputUrl)}`,
+            name: "VKR Downloader API",
+            url: `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`,
             method: "GET",
             priority: 1
         },
         {
-            name: "Local Python Backend",
-            url: `http://localhost:8001/video-info?url=${encodeURIComponent(inputUrl)}`,
+            name: "Our Backend Server",
+            url: `http://localhost:8002/video-info?url=${encodeURIComponent(inputUrl)}`,
             method: "GET",
             priority: 2
         },
         {
-            name: "VKR Downloader",
-            url: `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`,
+            name: "Local Python Backend",
+            url: `http://localhost:8001/video-info?url=${encodeURIComponent(inputUrl)}`,
             method: "GET",
             priority: 3
         },
@@ -393,6 +393,11 @@ function directDownloadFile(url, quality) {
                 // Got direct file URL from our backend
                 triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
                 btn.innerHTML = '✅ Downloaded!';
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 3000);
             } else if (data && data.alternative_urls && data.alternative_urls.length > 0) {
                 // Try alternative URLs from our backend
                 tryMultipleDownloadUrls(data.alternative_urls, quality, btn, originalText);
@@ -416,14 +421,7 @@ function directDownloadFile(url, quality) {
                         console.log('Secondary backend fetch error, trying VKR API...', e);
                         tryVKRDirectDownload(url, quality, btn, originalText);
                     });
-                return;
             }
-            
-            // Reset button after 3 seconds
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 3000);
         })
         .catch(error => {
             console.log('Primary backend fetch error, trying secondary backend...', error);

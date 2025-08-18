@@ -19,6 +19,17 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Skip service worker for localhost and API requests to prevent CORS issues
+  const url = new URL(event.request.url);
+  if (url.hostname === 'localhost' || 
+      url.hostname === '127.0.0.1' || 
+      url.pathname.includes('/api/') ||
+      url.pathname.includes('/video-info') ||
+      url.pathname.includes('/download')) {
+    console.log('Service Worker: Bypassing cache for API request:', event.request.url);
+    return; // Let the request go through normally
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       if (response) {
