@@ -159,668 +159,42 @@ function getParameterByName(name, url) {
  *******************************/
 
 /**
- * Make an AJAX request with comprehensive error handling and multiple API endpoints
+ * Make an AJAX GET request with retry capability.
  * @param {string} inputUrl - The input URL for the request.
  * @param {number} retries - Number of retry attempts remaining.
  */
-function makeRequest(inputUrl, retries = 3) {
-    console.log(`Starting download request for URL: ${inputUrl}`);
-    console.log(`Retries remaining: ${retries}`);
-    
-    // Validate URL first
-    if (!inputUrl || !isValidUrl(inputUrl)) {
-        displayError("Please enter a valid video URL.");
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("downloadBtn").disabled = false;
-        return;
-    }
-    
-    // Try multiple API endpoints for better reliability
-    const apiEndpoints = [
-        {
-            name: "VKR Downloader API",
-            url: `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`,
-            method: "GET",
-            priority: 1
-        },
-        {
-            name: "Our Backend Server",
-            url: `http://localhost:8002/video-info?url=${encodeURIComponent(inputUrl)}`,
-            method: "GET",
-            priority: 2
-        },
-        {
-            name: "Local Python Backend",
-            url: `http://localhost:8001/video-info?url=${encodeURIComponent(inputUrl)}`,
-            method: "GET",
-            priority: 3
-        },
-        {
-            name: "Alternative VKR API", 
-            url: `https://api.vkrdownloader.com/v1/extract?url=${encodeURIComponent(inputUrl)}`,
-            method: "GET",
-            priority: 4
-        }
-    ];
-    
-    const retryDelay = 1000;
+function makeRequest(inputUrl, retries = 4) {
+    const requestUrl = `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`;
+    const retryDelay = 2000; // Initial retry delay in milliseconds
     const maxRetries = retries;
-    
-    // Try the primary API first (sorted by priority)
-    apiEndpoints.sort((a, b) => a.priority - b.priority);
-    tryApiEndpoint(0, apiEndpoints, inputUrl, retries, maxRetries, retryDelay);
-}
 
-function tryApiEndpoint(endpointIndex, apiEndpoints, inputUrl, retries, maxRetries, retryDelay) {
-    if (endpointIndex >= apiEndpoints.length) {
-        if (retries > 0) {
-            let delay = retryDelay * Math.pow(1.5, maxRetries - retries);
-            console.log(`All endpoints failed. Retrying in ${delay / 1000} seconds... (${retries} attempts left)`);
-            setTimeout(() => tryApiEndpoint(0, apiEndpoints, inputUrl, retries - 1, maxRetries, retryDelay), delay);
-            return;
-        } else {
-            console.error("All API endpoints and retry attempts exhausted");
-            
-            // Force show video preview and download buttons immediately
-            console.log("Forcing direct download interface...");
-            forceShowDownloadInterface(inputUrl);
-            return;
-        }
-    }
-    
-    const endpoint = apiEndpoints[endpointIndex];
-    console.log(`\n=== Trying API ${endpointIndex + 1}/${apiEndpoints.length}: ${endpoint.name} ===`);
-    console.log(`URL: ${endpoint.url}`);
-    console.log(`Method: ${endpoint.method}`);
-    
-    let ajaxConfig = {
-        url: endpoint.url,
-        type: endpoint.method,
-        cache: false,
+    $.ajax({
+        url: requestUrl,
+        type: "GET",
+        cache: true,
         async: true,
         crossDomain: true,
-        timeout: 8000, // Reduced timeout for faster fallback
-        success: function (data, textStatus, xhr) {
-            console.log(`✅ Success from ${endpoint.name}:`, data);
-            console.log(`Response status: ${xhr.status} ${xhr.statusText}`);
-            
-            // Validate response data
-            if (!data) {
-                console.warn("Empty response received");
-                tryApiEndpoint(endpointIndex + 1, apiEndpoints, inputUrl, retries, maxRetries, retryDelay);
-                return;
-            }
-            
-            handleSuccessResponse(data, inputUrl, endpoint.name);
+        dataType: 'json',
+        timeout: 15000, // Extended timeout for slower networks
+        success: function (data) {
+            handleSuccessResponse(data, inputUrl);
         },
         error: function (xhr, status, error) {
-            console.error(`❌ ${endpoint.name} failed:`);
-            console.error(`Status: ${xhr.status} ${xhr.statusText}`);
-            console.error(`Error: ${status} - ${error}`);
-            console.error(`Response: ${xhr.responseText}`);
-            
-            // Try next endpoint immediately
-            setTimeout(() => {
-                tryApiEndpoint(endpointIndex + 1, apiEndpoints, inputUrl, retries, maxRetries, retryDelay);
-            }, 200);
-        }
-    };
-    
-    // Configure for specific APIs
-    if (endpoint.method === "POST" && endpoint.data) {
-        ajaxConfig.contentType = "application/json";
-        ajaxConfig.data = JSON.stringify(endpoint.data);
-    } else {
-        ajaxConfig.dataType = 'json';
-    }
-    
-    console.log(`Sending request to ${endpoint.name}...`);
-    $.ajax(ajaxConfig);
-}
-
-/**
- * Validate if a string is a valid URL
- * @param {string} string - The string to validate
- * @returns {boolean} - True if valid URL, false otherwise
- */
-function isValidUrl(string) {
-    try {
-        new URL(string);
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-/**
- * Force show download interface when all APIs fail
- * @param {string} inputUrl - The video URL
- */
-function forceShowDownloadInterface(inputUrl) {
-    console.log("Forcing download interface display...");
-    
-    // Hide loading, enable button
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("downloadBtn").disabled = false;
-    
-    const videoId = getYouTubeVideoIds(inputUrl);
-    const encodedUrl = encodeURIComponent(inputUrl);
-    
-    // Show video preview immediately
-    const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "";
-    const videoHtml = videoId ? 
-        `<video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:400px; border-radius:20px;' 
-               poster='${thumbnailUrl}' controls playsinline>
-            <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=${encodedUrl}' type='video/mp4'>
-            Your browser does not support the video tag.
-        </video>` : 
-        `<div class="alert alert-info">
-            <h5>📹 Video Ready for Download</h5>
-            <p>Our servers are busy, but you can still download using the buttons below:</p>
-        </div>`;
-    
-    // Show working download buttons that don't rely on APIs
-    const downloadHtml = `
-        <div class="row mb-3">
-            <div class="col-md-3 mb-2">
-                <button onclick="directDownloadFile('${encodedUrl}', 'mp3')" 
-                        class="btn btn-success w-100" style="height: 45px; margin-top: 10px;">
-                    🎵 Download MP3
-                </button>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="directDownloadFile('${encodedUrl}', '720')" 
-                        class="btn btn-primary w-100" style="height: 45px; margin-top: 10px;">
-                    📹 Download 720p
-                </button>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="directDownloadFile('${encodedUrl}', '1080')" 
-                        class="btn btn-info w-100" style="height: 45px; margin-top: 10px;">
-                    🎬 Download 1080p
-                </button>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="directDownloadFile('${encodedUrl}', 'best')" 
-                        class="btn btn-warning w-100" style="height: 45px; margin-top: 10px;">
-                    ⭐ Best Quality
-                </button>
-            </div>
-        </div>
-        <div class="alert alert-info mt-3">
-            <p><strong>Note:</strong> Download will open in a new window. Allow popups if needed.</p>
-        </div>
-    `;
-    
-    // Update DOM elements
-    updateElement("thumb", videoHtml);
-    updateElement("title", videoId ? "<h3>Video Ready for Download</h3>" : "<h3>Download Available</h3>");
-    updateElement("description", "");
-    updateElement("duration", "");
-    
-    // Update download container
-    const downloadContainer = document.getElementById("download");
-    downloadContainer.innerHTML = downloadHtml;
-    
-    // Show container
-    document.getElementById("container").style.display = "block";
-}
-
-/**
- * Direct download function that gets actual file URLs from our backend
- * @param {string} url - Encoded video URL
- * @param {string} quality - Quality (mp3, 720, 1080, best)
- */
-function directDownloadFile(url, quality) {
-    console.log(`Direct download: ${quality}`);
-    
-    // Show a brief loading message
-    const btn = (typeof event !== 'undefined' && event.target) ? event.target : null;
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Getting file...';
-    btn.disabled = true;
-    
-    // Try our backend first
-    const ourBackendUrl = `http://localhost:8002/download?url=${url}&quality=${quality}`;
-    const secondaryBackendUrl = `http://localhost:8001/download?url=${url}&quality=${quality === 'mp3' ? 'audio' : quality}`;
-    
-    fetch(ourBackendUrl)
-        .then(response => response.json())
-        .then(data => {
-            console.log('Our Backend Response:', data);
-            
-            if (data && data.success && data.download_url) {
-                // Got direct file URL from our backend
-                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                btn.innerHTML = '✅ Downloaded!';
-                // Reset button after 3 seconds
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }, 3000);
-            } else if (data && data.alternative_urls && data.alternative_urls.length > 0) {
-                // Try alternative URLs from our backend
-                tryMultipleDownloadUrls(data.alternative_urls, quality, btn, originalText);
-                return;
+            if (retries > 0) {
+                let delay = retryDelay * Math.pow(2, maxRetries - retries); // Exponential backoff
+                console.log(`Retrying in ${delay / 1000} seconds... (${retries} attempts left)`);
+                setTimeout(() => makeRequest(inputUrl, retries - 1), delay);
             } else {
-                // Our backend failed - try secondary backend
-                console.log('Primary backend failed, trying secondary backend (yt-dlp)...');
-                return fetch(secondaryBackendUrl)
-                    .then(r => r.json())
-                    .then(d2 => {
-                        console.log('Secondary Backend Response:', d2);
-                        if (d2.download_url) {
-                            triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                            btn.innerHTML = '✅ Downloaded!';
-                        } else {
-                            console.log('Secondary backend failed, trying VKR API...');
-                            tryVKRDirectDownload(url, quality, btn, originalText);
-                        }
-                    })
-                    .catch(e => {
-                        console.log('Secondary backend fetch error, trying VKR API...', e);
-                        tryVKRDirectDownload(url, quality, btn, originalText);
-                    });
-            }
-        })
-        .catch(error => {
-            console.log('Primary backend fetch error, trying secondary backend...', error);
-            fetch(secondaryBackendUrl)
-                .then(r => r.json())
-                .then(d2 => {
-                    console.log('Secondary Backend Response:', d2);
-                    if (d2.download_url) {
-                        triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                        btn.innerHTML = '✅ Downloaded!';
-                        setTimeout(() => {
-                            btn.innerHTML = originalText;
-                            btn.disabled = false;
-                        }, 3000);
-                    } else {
-                        console.log('Secondary backend failed, trying VKR API...');
-                        tryVKRDirectDownload(url, quality, btn, originalText);
-                    }
-                })
-                .catch(e => {
-                    console.log('Secondary backend fetch error, trying VKR API...', e);
-                    tryVKRDirectDownload(url, quality, btn, originalText);
-                });
-        });
-}
-
-/**
- * Try multiple download URLs in sequence
- * @param {Array} urls - Array of download URLs
- * @param {string} quality - Quality
- * @param {HTMLElement} btn - Button element
- * @param {string} originalText - Original button text
- */
-function tryMultipleDownloadUrls(urls, quality, btn, originalText) {
-    let urlIndex = 0;
-    
-    function tryNext() {
-        if (urlIndex >= urls.length) {
-            btn.innerHTML = '❌ Failed';
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 3000);
-            return;
-        }
-        
-        const url = urls[urlIndex];
-        urlIndex++;
-        
-        // Try to download from this URL
-        fetch(url, { method: 'HEAD' })
-            .then(response => {
-                if (response.ok) {
-                    triggerDirectDownload(url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                    btn.innerHTML = '✅ Downloaded!';
-                    setTimeout(() => {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                    }, 3000);
-                } else {
-                    tryNext();
-                }
-            })
-            .catch(() => {
-                // If HEAD request fails, just try the download anyway
-                triggerDirectDownload(url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                btn.innerHTML = '✅ Downloading...';
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }, 3000);
-            });
-    }
-    
-    tryNext();
-}
-
-/**
- * Try VKR direct download as fallback
- * @param {string} url - Video URL
- * @param {string} quality - Quality
- * @param {HTMLElement} btn - Button element
- * @param {string} originalText - Original button text
- */
-function tryVKRDirectDownload(url, quality, btn, originalText) {
-    // Get actual download URL from VKR API (not their redirect page)
-    const apiUrl = `https://vkrdownloader.xyz/server/api.php?vkr=${url}&q=${quality}`;
-    
-    fetch(apiUrl)
-        .then(response => response.json())
-        .then(data => {
-            console.log('VKR API Response:', data);
-            
-            if (data && data.success && data.download_url) {
-                // Got direct file URL - trigger download
-                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                btn.innerHTML = '✅ Downloaded!';
-            } else if (data && data.url) {
-                // Alternative response format
-                triggerDirectDownload(data.url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                btn.innerHTML = '✅ Downloaded!';
-            } else {
-                // VKR API failed - try direct file endpoint
-                console.log('VKR API failed, trying direct file endpoint...');
-                tryDirectFileDownload(url, quality, btn, originalText);
-                return;
-            }
-            
-            // Reset button after 3 seconds
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 3000);
-        })
-        .catch(error => {
-            console.log('VKR API failed, trying direct file endpoint...', error);
-            tryDirectFileDownload(url, quality, btn, originalText);
-        });
-}
-
-/**
- * Try direct file download without redirect pages
- * @param {string} url - Video URL
- * @param {string} quality - Quality
- * @param {HTMLElement} btn - Button element
- * @param {string} originalText - Original button text
- */
-function tryDirectFileDownload(url, quality, btn, originalText) {
-    // Try VKR direct file endpoint with force parameter
-    const directFileUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${url}&q=${quality}&direct=1&force=1`;
-    
-    // Create hidden iframe for download
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = directFileUrl;
-    
-    iframe.onload = function() {
-        btn.innerHTML = '✅ Downloading...';
-        setTimeout(() => {
-            document.body.removeChild(iframe);
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }, 3000);
-    };
-    
-    iframe.onerror = function() {
-        btn.innerHTML = '❌ Failed';
-        document.body.removeChild(iframe);
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }, 3000);
-    };
-    
-    document.body.appendChild(iframe);
-}
-
-/**
- * Try advanced fallback methods when all APIs fail
- * @param {string} inputUrl - The video URL to process
- */
-function tryAdvancedFallback(inputUrl) {
-    console.log("Attempting direct server download...");
-    
-    // Try to start the Python backend silently
-    tryStartPythonBackend().then(() => {
-        // Try the Python backend again after confirming it's running
-        setTimeout(() => {
-            tryPythonBackend(inputUrl);
-        }, 1000);
-    }).catch(() => {
-        // If Python backend fails, go directly to comprehensive fallback with video preview
-        showComprehensiveFallback(inputUrl);
-    });
-}
-
-/**
- * Try to start the Python backend server
- */
-function tryStartPythonBackend() {
-    return new Promise((resolve, reject) => {
-        // Check if backend is already running
-        $.ajax({
-            url: 'http://localhost:8001/video-info?url=test',
-            method: 'GET',
-            timeout: 3000,
-            success: function() {
-                console.log("Python backend is already running");
-                resolve();
-            },
-            error: function() {
-                console.log("Python backend not available, using direct server download...");
-                reject();
-            }
-        });
-    });
-}
-
-/**
- * Try the Python backend for video processing
- * @param {string} inputUrl - The video URL
- */
-function tryPythonBackend(inputUrl) {
-    console.log("Trying Python backend...");
-    
-    $.ajax({
-        url: `http://localhost:8001/video-info?url=${encodeURIComponent(inputUrl)}`,
-        method: 'GET',
-        timeout: 30000,
-        success: function(data) {
-            console.log("✅ Python backend success:", data);
-            if (data.success) {
-                handlePythonBackendResponse(data, inputUrl);
-            } else if (data.fallback_urls) {
-                showFallbackUrls(data.fallback_urls, inputUrl);
-            } else {
-                showComprehensiveFallback(inputUrl);
+                const errorMessage = getErrorMessage(xhr, status, error);
+                console.error(`Error Details: ${errorMessage}`);
+                displayError("Unable to fetch the download link after several attempts. Please check the URL or try again later.");
+                document.getElementById("loading").style.display = "none";
             }
         },
-        error: function(xhr, status, error) {
-            console.error("❌ Python backend failed:", error);
-            showComprehensiveFallback(inputUrl);
+        complete: function () {
+            document.getElementById("downloadBtn").disabled = false; // Re-enable the button
         }
     });
-}
-
-/**
- * Handle successful Python backend response
- * @param {Object} data - Response data from Python backend
- * @param {string} inputUrl - Original input URL
- */
-function handlePythonBackendResponse(data, inputUrl) {
-    document.getElementById("container").style.display = "block";
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("downloadBtn").disabled = false;
-
-    const videoId = getYouTubeVideoIds(inputUrl);
-    const thumbnailUrl = data.thumbnail || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "");
-    
-    // Construct video HTML
-    const videoHtml = `
-        <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
-               poster='${thumbnailUrl}' controls playsinline>
-            <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
-            Your browser does not support the video tag.
-        </video>`;
-    
-    const titleHtml = data.title ? `<h3>${sanitizeContent(data.title)}</h3>` : "";
-    const descriptionHtml = data.description ? `<h4><details><summary>View Description</summary>${sanitizeContent(data.description.substring(0, 500))}...</details></h4>` : "";
-    const durationHtml = data.duration ? `<h5>Duration: ${formatDuration(data.duration)}</h5>` : "";
-
-    // Update DOM elements
-    updateElement("thumb", videoHtml);
-    updateElement("title", titleHtml);
-    updateElement("description", descriptionHtml);
-    updateElement("duration", durationHtml);
-
-    // Generate download buttons from Python backend data
-    generatePythonDownloadButtons(data, inputUrl);
-}
-
-/**
- * Generate download buttons from Python backend data
- * @param {Object} data - Video data from Python backend
- * @param {string} inputUrl - Original input URL
- */
-function generatePythonDownloadButtons(data, inputUrl) {
-    const downloadContainer = document.getElementById("download");
-    downloadContainer.innerHTML = "";
-
-    if (data.formats && data.formats.length > 0) {
-        data.formats.forEach(format => {
-            const downloadUrl = `http://localhost:8001/download?url=${encodeURIComponent(inputUrl)}&quality=${format.height}`;
-            downloadContainer.innerHTML += `
-                <button class="dlbtns" style="background:#007bff" onclick="downloadFromBackend('${downloadUrl}', '${format.quality}')">
-                    ${format.quality} (${format.ext.toUpperCase()})
-                </button>`;
-        });
-    }
-    
-    // Add audio download option
-    const audioUrl = `http://localhost:8001/download?url=${encodeURIComponent(inputUrl)}&quality=audio`;
-    downloadContainer.innerHTML += `
-        <button class="dlbtns" style="background:#28a745" onclick="downloadFromBackend('${audioUrl}', 'MP3')">
-            Audio (MP3)
-        </button>`;
-    
-    // Add fallback option
-    downloadContainer.innerHTML += `
-        <button class="dlbtns" style="background:#6c757d" onclick="showComprehensiveFallback('${inputUrl}')">
-            More Options
-        </button>`;
-}
-
-/**
- * Download from Python backend
- * @param {string} downloadUrl - Backend download URL
- * @param {string} quality - Quality description
- */
-function downloadFromBackend(downloadUrl, quality) {
-    console.log(`Downloading ${quality} from backend...`);
-    
-    $.ajax({
-        url: downloadUrl,
-        method: 'GET',
-        timeout: 5000,
-        success: function(data) {
-            if (data.download_url) {
-                // Open the direct download URL
-                window.open(data.download_url, '_blank');
-            } else {
-                alert('Download URL not available. Please try alternative methods.');
-            }
-        },
-        error: function() {
-            alert('Download failed. Please try alternative methods.');
-        }
-    });
-}
-
-/**
- * Show comprehensive fallback options when all else fails
- * @param {string} inputUrl - The video URL
- */
-function showComprehensiveFallback(inputUrl) {
-    const videoId = getYouTubeVideoIds(inputUrl);
-    const encodedUrl = encodeURIComponent(inputUrl);
-    
-    // Show video preview and direct download buttons - no external alternatives!
-    const videoHtml = videoId ? 
-        `<video style='background: black url(https://i.ytimg.com/vi/${videoId}/hqdefault.jpg) center center/cover no-repeat; width:100%; height:400px; border-radius:20px;' 
-               poster='https://i.ytimg.com/vi/${videoId}/hqdefault.jpg' controls playsinline>
-            <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=${encodedUrl}' type='video/mp4'>
-            Your browser does not support the video tag.
-        </video>` : 
-        `<div class="alert alert-info">
-            <h5>📹 Video Ready for Download</h5>
-            <p>Select your preferred quality below:</p>
-        </div>`;
-    
-    const downloadHtml = `
-        <div class="row mb-3">
-            <div class="col-md-3 mb-2">
-                <button onclick="downloadVideoInSite('${encodedUrl}', 'mp3', 'audio')" 
-                        class="btn btn-success w-100" style="height: 45px; margin-top: 10px;">
-                    🎵 Download MP3
-                </button>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="downloadVideoInSite('${encodedUrl}', '720', 'video')" 
-                        class="btn btn-primary w-100" style="height: 45px; margin-top: 10px;">
-                    📹 Download 720p
-                </button>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="downloadVideoInSite('${encodedUrl}', '1080', 'video')" 
-                        class="btn btn-info w-100" style="height: 45px; margin-top: 10px;">
-                    🎬 Download 1080p
-                </button>
-            </div>
-            <div class="col-md-3 mb-2">
-                <button onclick="downloadVideoInSite('${encodedUrl}', 'best', 'video')" 
-                        class="btn btn-warning w-100" style="height: 45px; margin-top: 10px;">
-                    ⭐ Best Quality
-                </button>
-            </div>
-        </div>
-    `;
-    
-    // Update video preview
-    updateElement("thumb", videoHtml);
-    updateElement("title", videoId ? "<h3>Video Ready for Download</h3>" : "");
-    updateElement("description", "");
-    updateElement("duration", "");
-    
-    // Update download container with direct buttons only
-    const downloadContainer = document.getElementById("download");
-    downloadContainer.innerHTML = downloadHtml;
-    
-    document.getElementById("container").style.display = "block";
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("downloadBtn").disabled = false;
-}
-
-/**
- * Format duration from seconds to readable format
- * @param {number} seconds - Duration in seconds
- * @returns {string} - Formatted duration
- */
-function formatDuration(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    
-    if (hours > 0) {
-        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    } else {
-        return `${minutes}:${secs.toString().padStart(2, '0')}`;
-    }
 }
 
 function getErrorMessage(xhr, status, error) {
@@ -874,12 +248,6 @@ function displayError(message) {
  * Handle the "Download" button click event.
  */
 document.getElementById("downloadBtn").addEventListener("click", debounce(function () {
-    // Clear any previous error messages
-    const errorContainer = document.getElementById("error");
-    if (errorContainer) {
-        errorContainer.style.display = "none";
-    }
-    
     document.getElementById("loading").style.display = "initial";
     document.getElementById("downloadBtn").disabled = true; // Disable the button
 
@@ -903,10 +271,6 @@ function displayError(message) {
     if (errorContainer) {
         errorContainer.innerHTML = sanitizeContent(message);
         errorContainer.style.display = "block";
-        
-        // Hide other containers when showing error
-        document.getElementById("container").style.display = "none";
-        document.getElementById("loading").style.display = "none";
     } else {
         // Fallback to alert if error container is not available
         alert(message);
@@ -923,91 +287,54 @@ function displayError(message) {
  * @param {string} inputUrl - The original input URL.
  */
 function handleSuccessResponse(data, inputUrl) {
-    console.log('Processing response data:', data);
-    
     document.getElementById("container").style.display = "block";
     document.getElementById("loading").style.display = "none";
-    document.getElementById("downloadBtn").disabled = false;
 
-    // Handle different API response formats
-    let videoData = null;
-    
-    // Check for vkrdownloader format
     if (data.data) {
-        videoData = data.data;
-    }
-    // Check for cobalt format  
-    else if (data.status === "success" || data.url) {
-        videoData = {
-            title: "Downloaded Video",
-            thumbnail: "",
-            downloads: [{
-                url: data.url,
-                format_id: "mp4",
-                size: "Unknown"
-            }],
-            source: inputUrl
-        };
-    }
-    // Check for loader.to format
-    else if (data.success) {
-        videoData = {
-            title: data.title || "Downloaded Video", 
-            thumbnail: data.thumbnail || "",
-            downloads: data.links ? data.links.map(link => ({
-                url: link.link,
-                format_id: link.type,
-                size: link.size || "Unknown"
-            })) : [],
-            source: inputUrl
-        };
-    }
-    
-    if (videoData) {
-        const videoId = getYouTubeVideoIds(inputUrl);
-        const thumbnailUrl = videoId 
-            ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-            : (videoData.thumbnail || "");
+        const videoData = data.data;
         
-        // Construct video HTML with fallback sources
-        const videoHtml = createVideoElement(videoData, thumbnailUrl, inputUrl, videoId);
+        // Extract necessary data
+        //const thumbnailUrl = videoData.thumbnail;
+        const downloadUrls = videoData.downloads.map(download => download.url);
+        const videoSource = videoData.source;
+        const videoId = getYouTubeVideoIds(videoSource);
+        const thumbnailUrl = videoId 
+    ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    : videoData.thumbnail;
+        // Construct video HTML
+        const videoHtml = `
+    <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
+           poster='${thumbnailUrl}' controls playsinline>
+        <source src='${videoData.downloads[5]?.url || ''}' type='video/mp4'>
+        ${Array.isArray(downloadUrls) ? downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('') : ''}
+        <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
+    </video>`;
+        const YTvideoHtml = `
+            <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
+                   poster='${thumbnailUrl}' controls playsinline>
+                 <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=https://youtu.be/${videoId}' type='video/mp4'>
+                 <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${inputUrl}' type='video/mp4'>
+                ${downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('')}
+            </video>`;
         const titleHtml = videoData.title ? `<h3>${sanitizeContent(videoData.title)}</h3>` : "";
         const descriptionHtml = videoData.description ? `<h4><details><summary>View Description</summary>${sanitizeContent(videoData.description)}</details></h4>` : "";
         const durationHtml = videoData.size ? `<h5>${sanitizeContent(videoData.size)}</h5>` : "";
 
         // Update DOM elements
-        updateElement("thumb", videoHtml);
+        if (videoId) {
+            updateElement("thumb", YTvideoHtml);
+        } else {
+            updateElement("thumb", videoHtml);
+        }
         updateElement("title", titleHtml);
         updateElement("description", descriptionHtml);
         updateElement("duration", durationHtml);
 
         // Generate download buttons
-        generateDownloadButtons({data: videoData}, inputUrl);
+        generateDownloadButtons(data, inputUrl);
     } else {
-        displayError("Issue: Unable to retrieve the download link. Please try a different video URL.");
+        displayError("Issue: Unable to retrieve the download link. Please check the URL and contact us on Social Media @TheOfficialVKr.");
         document.getElementById("loading").style.display = "none";
-    }
-}
-
-function createVideoElement(videoData, thumbnailUrl, inputUrl, videoId) {
-    const downloadUrls = videoData.downloads ? videoData.downloads.map(download => download.url) : [];
-    
-    if (videoId) {
-        return `
-            <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
-                   poster='${thumbnailUrl}' controls playsinline>
-                 <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=https://youtu.be/${videoId}' type='video/mp4'>
-                 <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
-                ${downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('')}
-            </video>`;
-    } else {
-        return `
-            <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
-                   poster='${thumbnailUrl}' controls playsinline>
-                <source src='${videoData.downloads[0]?.url || ''}' type='video/mp4'>
-                ${downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('')}
-                <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
-            </video>`;
     }
 }
 
@@ -1021,440 +348,55 @@ function generateDownloadButtons(videoData, inputUrl) {
     downloadContainer.innerHTML = "";
 
     if (videoData.data) {
-        const downloads = videoData.data.downloads || [];
-        const videoSource = videoData.data.source || inputUrl;
+        const downloads = videoData.data.downloads;
+        const videoSource = videoData.data.source;
 
-        // Add YouTube specific buttons if applicable
+        // Add YouTube specific button if applicable
         const videoId = getYouTubeVideoIds(videoSource);
         if (videoId) {
-            const qualities = [
-                { quality: "mp3", label: "🎵 MP3", color: "#28a745", format: "audio" },
-                { quality: "360", label: "📱 360p", color: "#17a2b8", format: "video" },
-                { quality: "720", label: "📹 720p", color: "#007bff", format: "video" },
-                { quality: "1080", label: "🎬 1080p", color: "#6f42c1", format: "video" }
-            ];
-            qualities.forEach(item => {
+          //  downloadContainer.innerHTML += `
+          //      <a href='https://inv.nadeko.net/latest_version?id=${videoId}&itag=18&local=true' target='_blank' rel='noopener noreferrer'>
+          //          <button class='dlbtns' style='background: green'>Download Video (YouTube)</button>
+          //      </a>`;
+            const qualities = ["mp3", "360", "720", "1080"];
+            qualities.forEach(quality => {
                 downloadContainer.innerHTML += `
-                    <button class="dlbtns" 
-                            style="background:${item.color}; margin: 5px;" 
-                            onclick="downloadVideoInSite('${videoSource}', '${item.quality}', '${item.format}')">
-                        ${item.label}
-                    </button>`;
+      <iframe style="border: 0; outline: none; display:inline; min-width: 150px; max-height: 45px; height: 45px !important; margin-top: 10px; overflow: hidden;"   sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-downloads-without-user-activation"  scrolling="no"
+       src="https://vkrdownloader.xyz/server/dlbtn.php?q=${encodeURIComponent(quality)}&vkr=${encodeURIComponent(videoSource)}">
+       </iframe>`;
             });
         }
-        
         // Generate download buttons for available formats
-        if (downloads && downloads.length > 0) {
-            downloads.forEach(download => {
-                if (download && download.url) {
-                    const downloadUrl = download.url;
-                    const itag = getParameterByName("itag", downloadUrl);
-                    const bgColor = getBackgroundColor(itag);
-                    const videoExt = download.format_id || "mp4";
-                    const videoSize = download.size || "Unknown";
+        downloads.forEach(download => {
+            if (download && download.url) {
+                const downloadUrl = download.url;
+                const itag = getParameterByName("itag", downloadUrl);
+                const bgColor = getBackgroundColor(itag);
+                const videoExt = download.format_id;
+                const videoSize = download.size;
 
-                    downloadContainer.innerHTML += `
-                        <button class="dlbtns" 
-                                style="background:${bgColor}" 
-                                onclick="downloadVideoInSite('${inputUrl}', '${videoExt}', 'video')">
-                            ${sanitizeContent(videoExt)} - ${sanitizeContent(videoSize)}
-                        </button>`;
-                }
-            });
-        }
-        
-        // Add fallback download button if no specific downloads available
-        if (downloadContainer.innerHTML.trim() === "") {
-            downloadContainer.innerHTML += `
-                <button class="dlbtns" style="background:#007bff" onclick="downloadVideoInSite('${inputUrl}', 'best', 'video')">
-                    📥 Download Video
-                </button>`;
-        }
+const redirectUrl = `https://vkrdownloader.xyz/forcedl?force=${encodeURIComponent(downloadUrl)}`;
+downloadContainer.innerHTML += `
+  <button class="dlbtns" style="background:${bgColor}" onclick="window.location.href='${redirectUrl}'">
+    ${sanitizeContent(videoExt)} - ${sanitizeContent(videoSize)}
+  </button>
+`;
+
+
+
+            }
+        });
+
     } else {
-        // Fallback for when no data structure matches
-        downloadContainer.innerHTML += `
-            <button class="dlbtns" style="background:#007bff" onclick="downloadVideoInSite('${inputUrl}', 'mp4', 'video')">
-                Download Video
-            </button>`;
+        displayError("No download links found or data structure is incorrect.");
+        document.getElementById("loading").style.display = "none";
     }
-}
 
-/**
- * Download video directly within the site interface
- * @param {string} url - Video URL
- * @param {string} quality - Quality (mp3, 720, 1080, etc.)
- * @param {string} format - Format type (video/audio)
- */
-function downloadVideoInSite(url, quality, format = 'video') {
-    console.log(`Starting ${format} download for quality: ${quality}`);
-    
-    // Show download progress
-    showDownloadProgress(quality, format);
-    
-    // Decode URL if it's encoded
-    const actualUrl = decodeURIComponent(url);
-    
-    // Try our backend first
-    const ourBackendUrl = `http://localhost:8002/download?url=${encodeURIComponent(actualUrl)}&quality=${quality}`;
-    const secondaryBackendUrl = `http://localhost:8001/download?url=${encodeURIComponent(actualUrl)}&quality=${quality === 'mp3' ? 'audio' : quality}`;
-    
-    fetch(ourBackendUrl)
-        .then(response => response.json())
-        .then(data => {
-            console.log('Our Backend Download Response:', data);
-            
-            if (data && data.success && data.download_url) {
-                // Got direct file URL from our backend
-                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                hideDownloadProgress();
-                showDownloadSuccess(quality, format);
-            } else if (data && data.alternative_urls && data.alternative_urls.length > 0) {
-                // Try alternative URLs from our backend
-                triggerDirectDownload(data.alternative_urls[0], `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                hideDownloadProgress();
-                showDownloadSuccess(quality, format);
-            } else {
-                // Primary backend failed - try secondary backend (yt-dlp)
-                console.log('Primary backend failed, trying secondary backend (yt-dlp)...');
-                return fetch(secondaryBackendUrl)
-                    .then(r => r.json())
-                    .then(d2 => {
-                        console.log('Secondary Backend Download Response:', d2);
-                        if (d2.download_url) {
-                            triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                            hideDownloadProgress();
-                            showDownloadSuccess(quality, format);
-                        } else {
-                            console.log('Secondary backend failed, trying VKR API...');
-                            tryVKRApiDownload(actualUrl, quality, format);
-                        }
-                    })
-                    .catch(e => {
-                        console.log('Secondary backend fetch error, trying VKR API...', e);
-                        tryVKRApiDownload(actualUrl, quality, format);
-                    });
-            }
-        })
-        .catch(error => {
-            console.log('Primary backend fetch error, trying secondary backend...', error);
-            fetch(secondaryBackendUrl)
-                .then(r => r.json())
-                .then(d2 => {
-                    console.log('Secondary Backend Download Response:', d2);
-                    if (d2.download_url) {
-                        triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                        hideDownloadProgress();
-                        showDownloadSuccess(quality, format);
-                    } else {
-                        console.log('Secondary backend failed, trying VKR API...');
-                        tryVKRApiDownload(actualUrl, quality, format);
-                    }
-                })
-                .catch(e => {
-                    console.log('Secondary backend fetch error, trying VKR API...', e);
-                    tryVKRApiDownload(actualUrl, quality, format);
-                });
-        });
-}
-
-/**
- * Try VKR API for download
- * @param {string} url - Video URL
- * @param {string} quality - Quality
- * @param {string} format - Format
- */
-function tryVKRApiDownload(url, quality, format) {
-    // Try to get direct download URL from VKR API (not their download page)
-    const apiUrl = `https://vkrdownloader.xyz/server/api.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
-    
-    fetch(apiUrl)
-        .then(response => response.json())
-        .then(data => {
-            console.log('VKR Download API Response:', data);
-            
-            if (data && data.success && data.download_url) {
-                // Got direct file URL
-                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                hideDownloadProgress();
-                showDownloadSuccess(quality, format);
-            } else if (data && data.url) {
-                // Alternative response format
-                triggerDirectDownload(data.url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
-                hideDownloadProgress();
-                showDownloadSuccess(quality, format);
-            } else {
-                // VKR API didn't return direct URL - try alternative
-                console.log("VKR API failed, trying alternative method...");
-                tryAlternativeDownload(url, quality, format);
-            }
-        })
-        .catch(error => {
-            console.log("VKR API fetch failed, trying alternative method...", error);
-            tryAlternativeDownload(url, quality, format);
-        });
-}
-
-/**
- * Try multiple direct download methods without external redirects
- * @param {string} url - Video URL
- * @param {string} quality - Quality (mp3, 720, 1080, etc.)
- * @param {string} format - Format type (video/audio)
- */
-function tryDirectDownloadMethods(url, quality, format) {
-    // Method 1: Try Python backend first
-    if (tryPythonDirectDownload(url, quality, format)) {
-        return;
+    // If no download buttons or iframes were added, notify the user
+    if (downloadContainer.innerHTML.trim() === "") {
+        displayError("Server Down due to Too Many Requests. Please contact us on Social Media @TheOfficialVKr.");
+        document.getElementById("container").style.display = "none";
+        // Redirecting the user to an alternative download page
+       // window.location.href = `https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(inputUrl)}`;
     }
-    
-    // Method 2: Try VKR direct download endpoint
-    const vkrDirectUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
-    
-    // Method 3: Use direct file download with proper headers
-    fetch(vkrDirectUrl, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/octet-stream, video/*, audio/*',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-    })
-    .then(response => {
-        if (response.ok && response.headers.get('content-type')?.includes('video') || 
-            response.headers.get('content-type')?.includes('audio') ||
-            response.headers.get('content-disposition')?.includes('attachment')) {
-            
-            // Direct file response - trigger download
-            const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
-            triggerDirectDownload(vkrDirectUrl, filename);
-            hideDownloadProgress();
-            showDownloadSuccess(quality, format);
-            
-        } else {
-            // Not a direct file, try blob download
-            return response.blob();
-        }
-    })
-    .then(blob => {
-        if (blob) {
-            const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
-            downloadBlob(blob, filename);
-            hideDownloadProgress();
-            showDownloadSuccess(quality, format);
-        }
-    })
-    .catch(error => {
-        console.log("Direct download failed, trying alternative method...");
-        tryAlternativeDownload(url, quality, format);
-    });
-}
-
-/**
- * Try Python backend for direct download
- * @param {string} url - Video URL
- * @param {string} quality - Quality
- * @param {string} format - Format
- * @returns {boolean} - True if attempt was made
- */
-function tryPythonDirectDownload(url, quality, format) {
-    try {
-        fetch(`http://localhost:8001/download?url=${encodeURIComponent(url)}&quality=${quality}`, {
-            method: 'GET',
-            timeout: 10000
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.download_url) {
-                const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
-                triggerDirectDownload(data.download_url, filename);
-                hideDownloadProgress();
-                showDownloadSuccess(quality, format);
-                return true;
-            }
-            return false;
-        })
-        .catch(() => false);
-        
-        return true; // Attempt was made
-    } catch (error) {
-        return false; // No attempt made
-    }
-}
-
-/**
- * Download blob as file
- * @param {Blob} blob - File blob
- * @param {string} filename - Filename
- */
-function downloadBlob(blob, filename) {
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.style.display = 'none';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Clean up the blob URL
-    window.URL.revokeObjectURL(url);
-    console.log(`Blob download triggered for: ${filename}`);
-}
-
-/**
- * Try alternative download method that gets direct file URLs
- * @param {string} url - Video URL
- * @param {string} quality - Quality
- * @param {string} format - Format
- */
-function tryAlternativeDownload(url, quality, format) {
-    console.log("Using alternative direct file download...");
-    
-    // Try VKR direct file download endpoint
-    const directFileUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}&direct=1`;
-    
-    // Create hidden iframe for file download
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = directFileUrl;
-    
-    iframe.onload = function() {
-        hideDownloadProgress();
-        showDownloadSuccess(quality, format);
-        console.log("Alternative download iframe loaded");
-        
-        // Remove iframe after download
-        setTimeout(() => {
-            if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-            }
-        }, 5000);
-    };
-    
-    iframe.onerror = function() {
-        console.log("Alternative download failed, trying final fallback...");
-        // Final fallback - direct file link
-        const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
-        const fallbackUrl = `https://vkrdownloader.xyz/server/force.php?vkr=${encodeURIComponent(url)}&q=${quality}&f=${filename}`;
-        
-        triggerDirectDownload(fallbackUrl, filename);
-        hideDownloadProgress();
-        showDownloadSuccess(quality, format);
-        
-        if (document.body.contains(iframe)) {
-            document.body.removeChild(iframe);
-        }
-    };
-    
-    document.body.appendChild(iframe);
-}
-
-/**
- * Trigger direct file download
- * @param {string} downloadUrl - Direct download URL
- * @param {string} filename - Suggested filename
- */
-function triggerDirectDownload(downloadUrl, filename) {
-    // Create temporary download link
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename;
-    link.style.display = 'none';
-    
-    // Add to DOM, click, and remove
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    console.log(`Direct download triggered for: ${filename}`);
-}
-
-/**
- * Show download progress indicator
- * @param {string} quality - Quality being downloaded
- * @param {string} format - Format being downloaded
- */
-function showDownloadProgress(quality, format) {
-    let progressContainer = document.getElementById('download-progress');
-    if (!progressContainer) {
-        progressContainer = document.createElement('div');
-        progressContainer.id = 'download-progress';
-        progressContainer.className = 'mt-3';
-        document.getElementById('download').appendChild(progressContainer);
-    }
-    
-    progressContainer.innerHTML = `
-        <div class="alert alert-info">
-            <h5>🚀 Starting Download...</h5>
-            <p>Preparing ${format === 'audio' ? 'Audio' : 'Video'} file in ${quality.toUpperCase()} quality</p>
-            <div class="progress">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                     style="width: 75%"></div>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Hide download progress
- */
-function hideDownloadProgress() {
-    const progressContainer = document.getElementById('download-progress');
-    if (progressContainer) {
-        progressContainer.innerHTML = '';
-    }
-}
-
-/**
- * Show download success message
- * @param {string} quality - Downloaded quality
- * @param {string} format - Downloaded format
- */
-function showDownloadSuccess(quality, format) {
-    const progressContainer = document.getElementById('download-progress');
-    if (progressContainer) {
-        progressContainer.innerHTML = `
-            <div class="alert alert-success">
-                <h5>✅ Download Started!</h5>
-                <p>Your ${format === 'audio' ? 'audio' : 'video'} file (${quality.toUpperCase()}) download has started. Check your downloads folder.</p>
-            </div>
-        `;
-        
-        // Auto-hide success message after 5 seconds
-        setTimeout(() => {
-            hideDownloadProgress();
-        }, 5000);
-    }
-}
-
-/**
- * Show download error message
- * @param {string} quality - Quality that failed
- * @param {string} format - Format that failed
- */
-function showDownloadError(quality, format) {
-    const progressContainer = document.getElementById('download-progress');
-    if (progressContainer) {
-        progressContainer.innerHTML = `
-            <div class="alert alert-warning">
-                <h5>⚠️ Download Issue</h5>
-                <p>There was an issue downloading the ${format === 'audio' ? 'audio' : 'video'} file (${quality.toUpperCase()}). Please try a different quality or try again later.</p>
-                <button onclick="hideDownloadProgress()" class="btn btn-sm btn-secondary">Close</button>
-            </div>
-        `;
-        
-        // Auto-hide error message after 8 seconds
-        setTimeout(() => {
-            hideDownloadProgress();
-        }, 8000);
-    }
-}
-
-/**
- * Callback for when download frame loads
- * @param {string} quality - Quality
- * @param {string} format - Format
- */
-function downloadFrameLoaded(quality, format) {
-    console.log(`Download frame loaded for ${quality} ${format}`);
-    // Frame loaded, download should have started
 }
