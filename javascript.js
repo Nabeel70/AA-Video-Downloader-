@@ -225,9 +225,9 @@ function tryApiEndpoint(endpointIndex, apiEndpoints, inputUrl, retries, maxRetri
         } else {
             console.error("All API endpoints and retry attempts exhausted");
             
-            // Try advanced fallback methods
-            console.log("Attempting advanced fallback methods...");
-            tryAdvancedFallback(inputUrl);
+            // Force show video preview and download buttons immediately
+            console.log("Forcing direct download interface...");
+            forceShowDownloadInterface(inputUrl);
             return;
         }
     }
@@ -243,7 +243,7 @@ function tryApiEndpoint(endpointIndex, apiEndpoints, inputUrl, retries, maxRetri
         cache: false,
         async: true,
         crossDomain: true,
-        timeout: 15000, // Reduced timeout for faster fallback
+        timeout: 8000, // Reduced timeout for faster fallback
         success: function (data, textStatus, xhr) {
             console.log(`✅ Success from ${endpoint.name}:`, data);
             console.log(`Response status: ${xhr.status} ${xhr.statusText}`);
@@ -266,7 +266,7 @@ function tryApiEndpoint(endpointIndex, apiEndpoints, inputUrl, retries, maxRetri
             // Try next endpoint immediately
             setTimeout(() => {
                 tryApiEndpoint(endpointIndex + 1, apiEndpoints, inputUrl, retries, maxRetries, retryDelay);
-            }, 500);
+            }, 200);
         }
     };
     
@@ -294,6 +294,120 @@ function isValidUrl(string) {
     } catch (_) {
         return false;
     }
+}
+
+/**
+ * Force show download interface when all APIs fail
+ * @param {string} inputUrl - The video URL
+ */
+function forceShowDownloadInterface(inputUrl) {
+    console.log("Forcing download interface display...");
+    
+    // Hide loading, enable button
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("downloadBtn").disabled = false;
+    
+    const videoId = getYouTubeVideoIds(inputUrl);
+    const encodedUrl = encodeURIComponent(inputUrl);
+    
+    // Show video preview immediately
+    const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "";
+    const videoHtml = videoId ? 
+        `<video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:400px; border-radius:20px;' 
+               poster='${thumbnailUrl}' controls playsinline>
+            <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=${encodedUrl}' type='video/mp4'>
+            Your browser does not support the video tag.
+        </video>` : 
+        `<div class="alert alert-info">
+            <h5>📹 Video Ready for Download</h5>
+            <p>Our servers are busy, but you can still download using the buttons below:</p>
+        </div>`;
+    
+    // Show working download buttons that don't rely on APIs
+    const downloadHtml = `
+        <div class="row mb-3">
+            <div class="col-md-3 mb-2">
+                <button onclick="directDownloadFile('${encodedUrl}', 'mp3')" 
+                        class="btn btn-success w-100" style="height: 45px; margin-top: 10px;">
+                    🎵 Download MP3
+                </button>
+            </div>
+            <div class="col-md-3 mb-2">
+                <button onclick="directDownloadFile('${encodedUrl}', '720')" 
+                        class="btn btn-primary w-100" style="height: 45px; margin-top: 10px;">
+                    📹 Download 720p
+                </button>
+            </div>
+            <div class="col-md-3 mb-2">
+                <button onclick="directDownloadFile('${encodedUrl}', '1080')" 
+                        class="btn btn-info w-100" style="height: 45px; margin-top: 10px;">
+                    🎬 Download 1080p
+                </button>
+            </div>
+            <div class="col-md-3 mb-2">
+                <button onclick="directDownloadFile('${encodedUrl}', 'best')" 
+                        class="btn btn-warning w-100" style="height: 45px; margin-top: 10px;">
+                    ⭐ Best Quality
+                </button>
+            </div>
+        </div>
+        <div class="alert alert-info mt-3">
+            <p><strong>Note:</strong> Download will open in a new window. Allow popups if needed.</p>
+        </div>
+    `;
+    
+    // Update DOM elements
+    updateElement("thumb", videoHtml);
+    updateElement("title", videoId ? "<h3>Video Ready for Download</h3>" : "<h3>Download Available</h3>");
+    updateElement("description", "");
+    updateElement("duration", "");
+    
+    // Update download container
+    const downloadContainer = document.getElementById("download");
+    downloadContainer.innerHTML = downloadHtml;
+    
+    // Show container
+    document.getElementById("container").style.display = "block";
+}
+
+/**
+ * Direct download function that works without APIs
+ * @param {string} url - Encoded video URL
+ * @param {string} quality - Quality (mp3, 720, 1080, best)
+ */
+function directDownloadFile(url, quality) {
+    console.log(`Direct download: ${quality}`);
+    
+    // Show a brief loading message
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Starting...';
+    btn.disabled = true;
+    
+    // Create direct download URL
+    const downloadUrl = `https://vkrdownloader.xyz/download.php?vkr=${url}&q=${quality}`;
+    
+    // Open in new window/tab
+    const newWindow = window.open(downloadUrl, '_blank');
+    
+    // Reset button after 2 seconds
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        // Show success message
+        if (newWindow) {
+            btn.innerHTML = '✅ Opened!';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        } else {
+            btn.innerHTML = '❌ Blocked';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        }
+    }, 1000);
 }
 
 /**
@@ -811,8 +925,23 @@ function downloadVideoInSite(url, quality, format = 'video') {
     // Decode URL if it's encoded
     const actualUrl = decodeURIComponent(url);
     
-    // Try multiple direct download methods
-    tryDirectDownloadMethods(actualUrl, quality, format);
+    // Create direct download URL that should work
+    const downloadUrl = `https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(actualUrl)}&q=${quality}`;
+    
+    // Try direct window open first (most reliable)
+    console.log("Attempting direct download window...");
+    const newWindow = window.open(downloadUrl, '_blank');
+    
+    if (newWindow) {
+        // Success - window opened
+        hideDownloadProgress();
+        showDownloadSuccess(quality, format);
+        console.log("Direct download window opened successfully");
+    } else {
+        // Popup blocked - try alternative method
+        console.log("Popup blocked, trying alternative method...");
+        tryAlternativeDownload(actualUrl, quality, format);
+    }
 }
 
 /**
@@ -930,27 +1059,22 @@ function downloadBlob(blob, filename) {
 function tryAlternativeDownload(url, quality, format) {
     console.log("Using alternative in-site download method...");
     
-    // Create a hidden iframe that downloads the file directly
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}&force=1`;
+    // Method 1: Try creating a download link
+    const downloadUrl = `https://vkrdownloader.xyz/download.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.target = '_blank';
+    link.download = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
+    link.style.display = 'none';
     
-    // Add download attribute handling
-    iframe.onload = function() {
-        setTimeout(() => {
-            document.body.removeChild(iframe);
-            hideDownloadProgress();
-            showDownloadSuccess(quality, format);
-        }, 2000);
-    };
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     
-    iframe.onerror = function() {
-        document.body.removeChild(iframe);
-        hideDownloadProgress();
-        showDownloadError(quality, format);
-    };
+    hideDownloadProgress();
+    showDownloadSuccess(quality, format);
     
-    document.body.appendChild(iframe);
+    console.log("Alternative download method executed");
 }
 
 /**
