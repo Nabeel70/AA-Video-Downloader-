@@ -808,29 +808,149 @@ function downloadVideoInSite(url, quality, format = 'video') {
     // Show download progress
     showDownloadProgress(quality, format);
     
-    // Create download request
-    const downloadUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
+    // Decode URL if it's encoded
+    const actualUrl = decodeURIComponent(url);
     
-    // Use fetch to get the actual download URL
-    fetch(`https://vkrdownloader.xyz/server/api.php?vkr=${encodeURIComponent(url)}&q=${quality}`)
+    // Try multiple direct download methods
+    tryDirectDownloadMethods(actualUrl, quality, format);
+}
+
+/**
+ * Try multiple direct download methods without external redirects
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality (mp3, 720, 1080, etc.)
+ * @param {string} format - Format type (video/audio)
+ */
+function tryDirectDownloadMethods(url, quality, format) {
+    // Method 1: Try Python backend first
+    if (tryPythonDirectDownload(url, quality, format)) {
+        return;
+    }
+    
+    // Method 2: Try VKR direct download endpoint
+    const vkrDirectUrl = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}`;
+    
+    // Method 3: Use direct file download with proper headers
+    fetch(vkrDirectUrl, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/octet-stream, video/*, audio/*',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+    })
+    .then(response => {
+        if (response.ok && response.headers.get('content-type')?.includes('video') || 
+            response.headers.get('content-type')?.includes('audio') ||
+            response.headers.get('content-disposition')?.includes('attachment')) {
+            
+            // Direct file response - trigger download
+            const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
+            triggerDirectDownload(vkrDirectUrl, filename);
+            hideDownloadProgress();
+            showDownloadSuccess(quality, format);
+            
+        } else {
+            // Not a direct file, try blob download
+            return response.blob();
+        }
+    })
+    .then(blob => {
+        if (blob) {
+            const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
+            downloadBlob(blob, filename);
+            hideDownloadProgress();
+            showDownloadSuccess(quality, format);
+        }
+    })
+    .catch(error => {
+        console.log("Direct download failed, trying alternative method...");
+        tryAlternativeDownload(url, quality, format);
+    });
+}
+
+/**
+ * Try Python backend for direct download
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality
+ * @param {string} format - Format
+ * @returns {boolean} - True if attempt was made
+ */
+function tryPythonDirectDownload(url, quality, format) {
+    try {
+        fetch(`http://localhost:8001/download?url=${encodeURIComponent(url)}&quality=${quality}`, {
+            method: 'GET',
+            timeout: 10000
+        })
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.download_url) {
-                // Create hidden download link and trigger download
-                triggerDirectDownload(data.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+            if (data.download_url) {
+                const filename = `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`;
+                triggerDirectDownload(data.download_url, filename);
                 hideDownloadProgress();
                 showDownloadSuccess(quality, format);
-            } else {
-                // Fallback to iframe method but keep in site
-                createInSiteDownloadFrame(downloadUrl, quality, format);
+                return true;
             }
+            return false;
         })
-        .catch(error => {
-            console.log("API failed, using direct download method...");
-            // Use direct download method
-            triggerDirectDownload(downloadUrl, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+        .catch(() => false);
+        
+        return true; // Attempt was made
+    } catch (error) {
+        return false; // No attempt made
+    }
+}
+
+/**
+ * Download blob as file
+ * @param {Blob} blob - File blob
+ * @param {string} filename - Filename
+ */
+function downloadBlob(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up the blob URL
+    window.URL.revokeObjectURL(url);
+    console.log(`Blob download triggered for: ${filename}`);
+}
+
+/**
+ * Try alternative download method that stays in-site
+ * @param {string} url - Video URL
+ * @param {string} quality - Quality
+ * @param {string} format - Format
+ */
+function tryAlternativeDownload(url, quality, format) {
+    console.log("Using alternative in-site download method...");
+    
+    // Create a hidden iframe that downloads the file directly
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(url)}&q=${quality}&force=1`;
+    
+    // Add download attribute handling
+    iframe.onload = function() {
+        setTimeout(() => {
+            document.body.removeChild(iframe);
             hideDownloadProgress();
-        });
+            showDownloadSuccess(quality, format);
+        }, 2000);
+    };
+    
+    iframe.onerror = function() {
+        document.body.removeChild(iframe);
+        hideDownloadProgress();
+        showDownloadError(quality, format);
+    };
+    
+    document.body.appendChild(iframe);
 }
 
 /**
@@ -851,43 +971,6 @@ function triggerDirectDownload(downloadUrl, filename) {
     document.body.removeChild(link);
     
     console.log(`Direct download triggered for: ${filename}`);
-}
-
-/**
- * Create in-site download frame for fallback
- * @param {string} downloadUrl - Download URL
- * @param {string} quality - Quality
- * @param {string} format - Format
- */
-function createInSiteDownloadFrame(downloadUrl, quality, format) {
-    let downloadContainer = document.getElementById('download-progress');
-    if (!downloadContainer) {
-        downloadContainer = document.createElement('div');
-        downloadContainer.id = 'download-progress';
-        downloadContainer.className = 'mt-3';
-        document.getElementById('download').appendChild(downloadContainer);
-    }
-    
-    downloadContainer.innerHTML = `
-        <div class="alert alert-info">
-            <h5>📥 Preparing ${format === 'audio' ? 'Audio' : 'Video'} Download (${quality})</h5>
-            <p>Your download will start automatically...</p>
-            <div class="progress mb-2">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                     style="width: 100%"></div>
-            </div>
-            <iframe src="${downloadUrl}" 
-                    style="display: none;" 
-                    onload="downloadFrameLoaded('${quality}', '${format}')">
-            </iframe>
-        </div>
-    `;
-    
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-        hideDownloadProgress();
-        showDownloadSuccess(quality, format);
-    }, 3000);
 }
 
 /**
@@ -945,6 +1028,29 @@ function showDownloadSuccess(quality, format) {
         setTimeout(() => {
             hideDownloadProgress();
         }, 5000);
+    }
+}
+
+/**
+ * Show download error message
+ * @param {string} quality - Quality that failed
+ * @param {string} format - Format that failed
+ */
+function showDownloadError(quality, format) {
+    const progressContainer = document.getElementById('download-progress');
+    if (progressContainer) {
+        progressContainer.innerHTML = `
+            <div class="alert alert-warning">
+                <h5>⚠️ Download Issue</h5>
+                <p>There was an issue downloading the ${format === 'audio' ? 'audio' : 'video'} file (${quality.toUpperCase()}). Please try a different quality or try again later.</p>
+                <button onclick="hideDownloadProgress()" class="btn btn-sm btn-secondary">Close</button>
+            </div>
+        `;
+        
+        // Auto-hide error message after 8 seconds
+        setTimeout(() => {
+            hideDownloadProgress();
+        }, 8000);
     }
 }
 
