@@ -201,7 +201,7 @@ function makeRequest(inputUrl, retries = 3) {
             method: "GET",
             priority: 4
         }
-    ];`/`
+    ];
     
     const retryDelay = 1000;
     const maxRetries = retries;
@@ -375,13 +375,14 @@ function directDownloadFile(url, quality) {
     console.log(`Direct download: ${quality}`);
     
     // Show a brief loading message
-    const btn = event.target;
+    const btn = (typeof event !== 'undefined' && event.target) ? event.target : null;
     const originalText = btn.innerHTML;
     btn.innerHTML = '⏳ Getting file...';
     btn.disabled = true;
     
     // Try our backend first
     const ourBackendUrl = `http://localhost:8002/download?url=${url}&quality=${quality}`;
+    const secondaryBackendUrl = `http://localhost:8001/download?url=${url}&quality=${quality === 'mp3' ? 'audio' : quality}`;
     
     fetch(ourBackendUrl)
         .then(response => response.json())
@@ -397,9 +398,24 @@ function directDownloadFile(url, quality) {
                 tryMultipleDownloadUrls(data.alternative_urls, quality, btn, originalText);
                 return;
             } else {
-                // Our backend failed - try VKR API
-                console.log('Our backend failed, trying VKR API...');
-                tryVKRDirectDownload(url, quality, btn, originalText);
+                // Our backend failed - try secondary backend
+                console.log('Primary backend failed, trying secondary backend (yt-dlp)...');
+                return fetch(secondaryBackendUrl)
+                    .then(r => r.json())
+                    .then(d2 => {
+                        console.log('Secondary Backend Response:', d2);
+                        if (d2.download_url) {
+                            triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                            btn.innerHTML = '✅ Downloaded!';
+                        } else {
+                            console.log('Secondary backend failed, trying VKR API...');
+                            tryVKRDirectDownload(url, quality, btn, originalText);
+                        }
+                    })
+                    .catch(e => {
+                        console.log('Secondary backend fetch error, trying VKR API...', e);
+                        tryVKRDirectDownload(url, quality, btn, originalText);
+                    });
                 return;
             }
             
@@ -410,8 +426,27 @@ function directDownloadFile(url, quality) {
             }, 3000);
         })
         .catch(error => {
-            console.log('Our backend failed, trying VKR API...', error);
-            tryVKRDirectDownload(url, quality, btn, originalText);
+            console.log('Primary backend fetch error, trying secondary backend...', error);
+            fetch(secondaryBackendUrl)
+                .then(r => r.json())
+                .then(d2 => {
+                    console.log('Secondary Backend Response:', d2);
+                    if (d2.download_url) {
+                        triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                        btn.innerHTML = '✅ Downloaded!';
+                        setTimeout(() => {
+                            btn.innerHTML = originalText;
+                            btn.disabled = false;
+                        }, 3000);
+                    } else {
+                        console.log('Secondary backend failed, trying VKR API...');
+                        tryVKRDirectDownload(url, quality, btn, originalText);
+                    }
+                })
+                .catch(e => {
+                    console.log('Secondary backend fetch error, trying VKR API...', e);
+                    tryVKRDirectDownload(url, quality, btn, originalText);
+                });
         });
 }
 
@@ -1063,6 +1098,7 @@ function downloadVideoInSite(url, quality, format = 'video') {
     
     // Try our backend first
     const ourBackendUrl = `http://localhost:8002/download?url=${encodeURIComponent(actualUrl)}&quality=${quality}`;
+    const secondaryBackendUrl = `http://localhost:8001/download?url=${encodeURIComponent(actualUrl)}&quality=${quality === 'mp3' ? 'audio' : quality}`;
     
     fetch(ourBackendUrl)
         .then(response => response.json())
@@ -1080,14 +1116,46 @@ function downloadVideoInSite(url, quality, format = 'video') {
                 hideDownloadProgress();
                 showDownloadSuccess(quality, format);
             } else {
-                // Our backend failed - try VKR API
-                console.log("Our backend failed, trying VKR API...");
-                tryVKRApiDownload(actualUrl, quality, format);
+                // Primary backend failed - try secondary backend (yt-dlp)
+                console.log('Primary backend failed, trying secondary backend (yt-dlp)...');
+                return fetch(secondaryBackendUrl)
+                    .then(r => r.json())
+                    .then(d2 => {
+                        console.log('Secondary Backend Download Response:', d2);
+                        if (d2.download_url) {
+                            triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                            hideDownloadProgress();
+                            showDownloadSuccess(quality, format);
+                        } else {
+                            console.log('Secondary backend failed, trying VKR API...');
+                            tryVKRApiDownload(actualUrl, quality, format);
+                        }
+                    })
+                    .catch(e => {
+                        console.log('Secondary backend fetch error, trying VKR API...', e);
+                        tryVKRApiDownload(actualUrl, quality, format);
+                    });
             }
         })
         .catch(error => {
-            console.log("Our backend failed, trying VKR API...", error);
-            tryVKRApiDownload(actualUrl, quality, format);
+            console.log('Primary backend fetch error, trying secondary backend...', error);
+            fetch(secondaryBackendUrl)
+                .then(r => r.json())
+                .then(d2 => {
+                    console.log('Secondary Backend Download Response:', d2);
+                    if (d2.download_url) {
+                        triggerDirectDownload(d2.download_url, `video_${quality}.${quality === 'mp3' ? 'mp3' : 'mp4'}`);
+                        hideDownloadProgress();
+                        showDownloadSuccess(quality, format);
+                    } else {
+                        console.log('Secondary backend failed, trying VKR API...');
+                        tryVKRApiDownload(actualUrl, quality, format);
+                    }
+                })
+                .catch(e => {
+                    console.log('Secondary backend fetch error, trying VKR API...', e);
+                    tryVKRApiDownload(actualUrl, quality, format);
+                });
         });
 }
 

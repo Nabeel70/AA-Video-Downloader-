@@ -107,7 +107,14 @@ class VideoDownloadHandler(BaseHTTPRequestHandler):
             self.ensure_ytdlp_installed()
             
             # Format quality selector
-            format_selector = quality if quality in ['best', 'worst'] else f'best[height<={quality}]'
+            if quality in ['best', 'worst']:
+                format_selector = quality
+            elif quality in ['audio', 'mp3']:
+                # Prefer bestaudio then fall back to best
+                format_selector = 'bestaudio/best'
+            else:
+                # numeric height constraint, fallback to best
+                format_selector = f'best[height<={quality}]'
             
             cmd = ['yt-dlp', '--get-url', '-f', format_selector, url]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
