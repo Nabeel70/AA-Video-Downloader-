@@ -196,10 +196,14 @@ function makeRequest(inputUrl, retries = 3) {
             priority: 3
         },
         {
-            name: "YouTube DL Web API",
-            url: `https://api.vevioz.com/api/button/mp3/320/${encodeURIComponent(inputUrl)}`,
-            method: "GET",
-            priority: 4
+            name: "RapidAPI Video Download",
+            url: `https://youtube-mp36.p.rapidapi.com/dl?id=${getYouTubeVideoIds(inputUrl)}`,
+            method: "GET", 
+            priority: 4,
+            headers: {
+                'X-RapidAPI-Key': 'YOUR_RAPIDAPI_KEY_HERE',
+                'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+            }
         }
     ];
     
@@ -297,16 +301,16 @@ function isValidUrl(string) {
  * @param {string} inputUrl - The video URL to process
  */
 function tryAdvancedFallback(inputUrl) {
-    console.log("Attempting advanced fallback methods...");
+    console.log("Attempting direct server download...");
     
-    // First try to start the Python backend if it's not running
+    // Try to start the Python backend silently
     tryStartPythonBackend().then(() => {
-        // Try the Python backend again after starting it
+        // Try the Python backend again after confirming it's running
         setTimeout(() => {
             tryPythonBackend(inputUrl);
-        }, 2000);
+        }, 1000);
     }).catch(() => {
-        // If Python backend fails, show comprehensive fallback options
+        // If Python backend fails, go directly to comprehensive fallback with video preview
         showComprehensiveFallback(inputUrl);
     });
 }
@@ -326,24 +330,7 @@ function tryStartPythonBackend() {
                 resolve();
             },
             error: function() {
-                console.log("Python backend not running, attempting to start...");
-                
-                // Show instruction to start backend
-                const instruction = `
-                    <div class="alert alert-info">
-                        <h5>🚀 Starting Advanced Downloader</h5>
-                        <p>To enable our advanced download system, please run this command in a terminal:</p>
-                        <div class="bg-dark text-light p-2 rounded mb-2">
-                            <code>python3 backend.py</code>
-                        </div>
-                        <p>Or click the button below to try alternative methods:</p>
-                        <button onclick="showComprehensiveFallback('${inputUrl}')" class="btn btn-warning">
-                            Show Alternative Downloads
-                        </button>
-                    </div>
-                `;
-                
-                displayError(instruction);
+                console.log("Python backend not available, using direct server download...");
                 reject();
             }
         });
@@ -480,13 +467,19 @@ function showComprehensiveFallback(inputUrl) {
     const videoId = getYouTubeVideoIds(inputUrl);
     const encodedUrl = encodeURIComponent(inputUrl);
     
-    const fallbackHtml = `
-        <div class="alert alert-warning">
-            <h5>🔄 Alternative Download Methods</h5>
-            <p>Our primary servers are currently busy. Try these reliable alternatives:</p>
-        </div>
-        
-        ${videoId ? `
+    // Show video preview and direct download buttons - no external alternatives!
+    const videoHtml = videoId ? 
+        `<video style='background: black url(https://i.ytimg.com/vi/${videoId}/hqdefault.jpg) center center/cover no-repeat; width:100%; height:400px; border-radius:20px;' 
+               poster='https://i.ytimg.com/vi/${videoId}/hqdefault.jpg' controls playsinline>
+            <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=${encodedUrl}' type='video/mp4'>
+            Your browser does not support the video tag.
+        </video>` : 
+        `<div class="alert alert-info">
+            <h5>📹 Video Ready for Download</h5>
+            <p>Select your preferred quality below:</p>
+        </div>`;
+    
+    const downloadHtml = `
         <div class="row mb-3">
             <div class="col-md-3 mb-2">
                 <iframe style="border: 0; outline: none; width: 100%; height: 45px; margin-top: 10px; overflow: hidden;"   
@@ -510,48 +503,23 @@ function showComprehensiveFallback(inputUrl) {
                 </iframe>
             </div>
             <div class="col-md-3 mb-2">
-                <a href="https://vkrdownloader.xyz/download.php?vkr=${encodedUrl}" target="_blank" class="btn btn-primary w-100">
-                    VKR Download Page
-                </a>
+                <button onclick="window.open('https://vkrdownloader.xyz/download.php?vkr=${encodedUrl}', '_blank')" 
+                        class="btn btn-primary w-100" style="height: 45px; margin-top: 10px;">
+                    HD Download
+                </button>
             </div>
-        </div>` : ''}
-        
-        <div class="row">
-            <div class="col-md-4 mb-2">
-                <a href="https://savefrom.net/#url=${encodedUrl}" target="_blank" class="btn btn-success w-100">
-                    SaveFrom.net
-                </a>
-            </div>
-            <div class="col-md-4 mb-2">
-                <a href="https://www.y2mate.com/youtube/${videoId}" target="_blank" class="btn btn-info w-100">
-                    Y2Mate
-                </a>
-            </div>
-            <div class="col-md-4 mb-2">
-                <a href="https://keepvid.com/?url=${encodedUrl}" target="_blank" class="btn btn-warning w-100">
-                    KeepVid
-                </a>
-            </div>
-        </div>
-        
-        <div class="mt-3">
-            <h6>📱 Mobile Apps:</h6>
-            <ul class="list-unstyled">
-                <li>• <strong>Android:</strong> TubeMate, VidMate, Snaptube</li>
-                <li>• <strong>iOS:</strong> Documents by Readdle + online downloaders</li>
-            </ul>
-        </div>
-        
-        <div class="mt-3 text-muted">
-            <small>
-                <strong>Pro Tip:</strong> For the best experience, run our Python backend by executing: 
-                <code>python3 backend.py</code> in your terminal.
-            </small>
         </div>
     `;
     
+    // Update video preview
+    updateElement("thumb", videoHtml);
+    updateElement("title", videoId ? "<h3>Video Ready for Download</h3>" : "");
+    updateElement("description", "");
+    updateElement("duration", "");
+    
+    // Update download container with direct buttons only
     const downloadContainer = document.getElementById("download");
-    downloadContainer.innerHTML = fallbackHtml;
+    downloadContainer.innerHTML = downloadHtml;
     
     document.getElementById("container").style.display = "block";
     document.getElementById("loading").style.display = "none";
