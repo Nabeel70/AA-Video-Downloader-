@@ -1,0 +1,26 @@
+{
+  "name": "aa-video-downloader",
+  "version": "1.0.0",
+  "description": "AA Videos Downloader - Download videos easily from various platforms",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 simple_backend.py",
+    "dev": "python3 simple_backend.py",
+    "build": "echo 'No build step required for static site'"
+  },
+  "keywords": [
+    "video",
+    "downloader",
+    "youtube",
+    "instagram",
+    "tiktok",
+    "facebook"
+  ],
+  "author": "AA Videos Downloader",
+  "license": "MIT",
+  "homepage": "https://github.com/Nabeel70/AA-Video-Downloader-",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nabeel70/AA-Video-Downloader-.git"
+  }
+}
