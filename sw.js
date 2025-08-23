@@ -1,12 +1,17 @@
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open('aavd-cache').then((cache) => {
-      return cache.addAll([
-        '/VKrDownloader',
-        '/VKrDownloader/index.html',
-        '/VKrDownloader/manifest.webmanifest',
-        '/VKrDownloader/logo.png'
-      ]);
+      const assets = [
+        '/',
+        '/index.html',
+        '/manifest.webmanifest',
+        '/logo.jpeg',
+        '/style.css',
+        '/javascript.js'
+      ];
+      return cache.addAll(assets.map(a => new Request(a, { cache: 'reload' }))).catch(() => {
+        // Ignore failures for optional assets
+      });
     })
   );
 });

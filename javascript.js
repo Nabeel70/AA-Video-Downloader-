@@ -386,10 +386,10 @@ function generateDownloadButtons(videoData, inputUrl) {
           //      <a href='https://inv.nadeko.net/latest_version?id=${videoId}&itag=18&local=true' target='_blank' rel='noopener noreferrer'>
           //          <button class='dlbtns' style='background: green'>Download Video (YouTube)</button>
           //      </a>`;
-            const qualities = ["mp3", "360", "720", "1080"];
+        const qualities = ["mp3", "360", "720", "1080"];
             qualities.forEach(quality => {
                 downloadContainer.innerHTML += `
-      <iframe style="border: 0; outline: none; display:inline; min-width: 150px; max-height: 45px; height: 45px !important; margin-top: 10px; overflow: hidden;"   sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-downloads-without-user-activation"  scrolling="no"
+    <iframe style="border: 0; outline: none; display:inline; min-width: 150px; max-height: 45px; height: 45px !important; margin-top: 10px; overflow: hidden;"   sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads"  scrolling="no"
        src="https://vkrdownloader.xyz/server/dlbtn.php?q=${encodeURIComponent(quality)}&vkr=${encodeURIComponent(videoSource)}">
        </iframe>`;
             });
@@ -400,13 +400,13 @@ function generateDownloadButtons(videoData, inputUrl) {
                 const downloadUrl = download.url;
                 const itag = getParameterByName("itag", downloadUrl);
                 const bgColor = getBackgroundColor(itag);
-        const videoExt = download.format_id || download.ext || 'video';
-        const videoSize = download.size || '';
+                const videoExt = download.format_id || download.ext || 'video';
+                const sizeLabel = (download.size && download.size !== '0 B') ? download.size : '';
 
 const redirectUrl = `https://vkrdownloader.xyz/forcedl?force=${encodeURIComponent(downloadUrl)}`;
 downloadContainer.innerHTML += `
-  <button class="dlbtns" style="background:${bgColor}" onclick="window.location.href='${redirectUrl}'">
-    ${sanitizeContent(videoExt)} - ${sanitizeContent(videoSize)}
+    <button class="dlbtns" style="background:${bgColor}" onclick="forceDownload('${redirectUrl}', 'video_${itag || 'file'}.mp4')">
+        ${sanitizeContent(videoExt)} ${sizeLabel ? ('- ' + sanitizeContent(sizeLabel)) : ''}
   </button>
 `;
 

@@ -1,33 +1,16 @@
 {
   "name": "AA Videos Downloader",
-  "short_name": "AA Videos Downloader",
+  "short_name": "AAVD",
   "description": "All in one Video Downloader - Download videos from Facebook, Twitter, YouTube, TikTok, and 1000+ other sites.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#007bff",
+  "theme_color": "#1CCED8",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/theofficialvkr/VKrDownloader/refs/heads/main/logo.png",
+      "src": "/logo.jpeg",
       "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://raw.githubusercontent.com/theofficialvkr/VKrDownloader/refs/heads/main/logo.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "https://raw.githubusercontent.com/theofficialvkr/VKrDownloader/refs/heads/main/logo.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://raw.githubusercontent.com/theofficialvkr/VKrDownloader/refs/heads/main/logo.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ]
 }
