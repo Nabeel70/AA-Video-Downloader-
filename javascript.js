@@ -163,64 +163,57 @@ function getParameterByName(name, url) {
  * @param {string} inputUrl - The input URL for the request.
  * @param {number} retries - Number of retry attempts remaining.
  */
-function makeRequest(inputUrl, retries = 4) {
-    // Prefer Netlify function proxy to avoid CORS and hide API shape
+function makeRequest(inputUrl, retries = 2) {
     const proxyUrl = `/.netlify/functions/proxy?vkr=${encodeURIComponent(inputUrl)}`;
     const directUrl = `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`;
-    const requestUrl = proxyUrl;
     const retryDelay = 2000; // Initial retry delay in milliseconds
     const maxRetries = retries;
 
-    $.ajax({
-        url: requestUrl,
-        type: "GET",
-        cache: true,
-        async: true,
-        crossDomain: true,
-        dataType: 'json',
-        timeout: 15000, // Extended timeout for slower networks
-        success: function (data) {
-            // Some deployments may return raw object or nested under 'data'
-            try {
-                handleSuccessResponse(data, inputUrl);
-            } catch (e) {
-                // Fallback: try calling direct API once if proxy failed to give expected shape
-                if (retries > 0) {
-                    $.ajax({
-                        url: directUrl,
-                        type: 'GET',
-                        dataType: 'json',
-                        timeout: 15000,
-                        success: function (data2) { handleSuccessResponse(data2, inputUrl); },
-                        error: function (xhr2, status2, error2) {
-                            const errMsg = getErrorMessage(xhr2, status2, error2);
-                            console.error(`Direct API error: ${errMsg}`);
-                            displayError('The downloader API is currently unavailable. Please try again shortly.');
-                            document.getElementById("loading").style.display = "none";
-                        },
-                        complete: function () { document.getElementById("downloadBtn").disabled = false; }
-                    });
-                } else {
-                    throw e;
+    function attempt(url, triedProxy = false, remaining = retries) {
+        $.ajax({
+            url,
+            type: 'GET',
+            cache: false,
+            async: true,
+            crossDomain: true,
+            dataType: 'json',
+            timeout: 12000,
+            success: function (data) {
+                try {
+                    handleSuccessResponse(data, inputUrl);
+                } catch (e) {
+                    if (!triedProxy) {
+                        // Try proxy if direct shape unexpected
+                        attempt(proxyUrl, true, remaining);
+                    } else {
+                        throw e;
+                    }
                 }
+            },
+            error: function (xhr, status, error) {
+                if (!triedProxy) {
+                    // Try proxy once if direct failed
+                    attempt(proxyUrl, true, remaining);
+                } else if (remaining > 0) {
+                    let delay = retryDelay * Math.pow(2, maxRetries - remaining);
+                    console.log(`Retrying in ${delay / 1000} seconds... (${remaining} attempts left)`);
+                    setTimeout(() => attempt(directUrl, false, remaining - 1), delay);
+                } else {
+                    const errorMessage = getErrorMessage(xhr, status, error);
+                    console.error(`Error Details: ${errorMessage}`);
+                    displayError('Unable to fetch the download link after several attempts. Please check the URL or try again later.');
+                    const loadingEl = document.getElementById('loading');
+                    if (loadingEl) loadingEl.style.display = 'none';
+                }
+            },
+            complete: function () {
+                document.getElementById('downloadBtn').disabled = false;
             }
-        },
-        error: function (xhr, status, error) {
-            if (retries > 0) {
-                let delay = retryDelay * Math.pow(2, maxRetries - retries); // Exponential backoff
-                console.log(`Retrying in ${delay / 1000} seconds... (${retries} attempts left)`);
-                setTimeout(() => makeRequest(inputUrl, retries - 1), delay);
-            } else {
-                const errorMessage = getErrorMessage(xhr, status, error);
-                console.error(`Error Details: ${errorMessage}`);
-                displayError("Unable to fetch the download link after several attempts. Please check the URL or try again later.");
-                document.getElementById("loading").style.display = "none";
-            }
-        },
-        complete: function () {
-            document.getElementById("downloadBtn").disabled = false; // Re-enable the button
-        }
-    });
+        });
+    }
+
+    // Start with direct API for speed, fallback to proxy
+    attempt(directUrl, false, retries);
 }
 
 function getErrorMessage(xhr, status, error) {
@@ -274,13 +267,14 @@ function displayError(message) {
  * Handle the "Download" button click event.
  */
 document.getElementById("downloadBtn").addEventListener("click", debounce(function () {
-    document.getElementById("loading").style.display = "initial";
+    const loadingEl = document.getElementById("loading");
+    if (loadingEl) loadingEl.style.display = "block";
     document.getElementById("downloadBtn").disabled = true; // Disable the button
 
     const inputUrl = document.getElementById("inputUrl").value.trim();
     if (!inputUrl) {
         displayError("Please enter a valid YouTube URL.");
-        document.getElementById("loading").style.display = "none";
+    if (loadingEl) loadingEl.style.display = "none";
         document.getElementById("downloadBtn").disabled = false;
         return;
     }
@@ -314,7 +308,8 @@ function displayError(message) {
  */
 function handleSuccessResponse(data, inputUrl) {
     document.getElementById("container").style.display = "block";
-    document.getElementById("loading").style.display = "none";
+    const loadingEl = document.getElementById('loading');
+    if (loadingEl) loadingEl.style.display = "none";
 
     // Normalize shape: some endpoints return {data:{...}}, others return {...} directly
     const videoData = data?.data ? data.data : data;
@@ -336,13 +331,12 @@ function handleSuccessResponse(data, inputUrl) {
         ${Array.isArray(downloadUrls) ? downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('') : ''}
         <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
     </video>`;
-        const YTvideoHtml = `
-            <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
-                   poster='${thumbnailUrl}' controls playsinline>
-                 <source src='https://vkrdownloader.xyz/server/redirect.php?vkr=https://youtu.be/${videoId}' type='video/mp4'>
-                 <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${inputUrl}' type='video/mp4'>
-                ${downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('')}
-            </video>`;
+                const YTvideoHtml = `
+                        <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
+                                     poster='${thumbnailUrl}' controls playsinline>
+                                 ${downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('')}
+                                 <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
+                        </video>`;
         const titleHtml = videoData.title ? `<h3>${sanitizeContent(videoData.title)}</h3>` : "";
         const descriptionHtml = videoData.description ? `<h4><details><summary>View Description</summary>${sanitizeContent(videoData.description)}</details></h4>` : "";
         const durationHtml = videoData.size ? `<h5>${sanitizeContent(videoData.size)}</h5>` : "";

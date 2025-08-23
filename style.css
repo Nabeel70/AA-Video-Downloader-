@@ -128,6 +128,7 @@ footer.footer_v2 {
 /* (Removed stray malformed wave rules that caused overlap) */
 
 #error { color: #dc3545; font-weight: 600; }
+.centerV { display: flex; align-items: center; justify-content: center; min-height: 80px; }
 
 /* Download buttons styling */
 .dlbtns {
