@@ -379,41 +379,37 @@ function generateDownloadButtons(videoData, inputUrl) {
         const downloads = videoData.data.downloads || [];
         const videoSource = videoData.data.source;
 
-        // Add YouTube specific button if applicable
+        // Add YouTube specific buttons only (no auto-iframe)
         const videoId = getYouTubeVideoIds(videoSource);
         if (videoId) {
-          //  downloadContainer.innerHTML += `
-          //      <a href='https://inv.nadeko.net/latest_version?id=${videoId}&itag=18&local=true' target='_blank' rel='noopener noreferrer'>
-          //          <button class='dlbtns' style='background: green'>Download Video (YouTube)</button>
-          //      </a>`;
-        const qualities = ["mp3", "360", "720", "1080"];
-            qualities.forEach(quality => {
+            const labelMap = { mp3: 'MP3 (Audio)', 360: 'MP4 360p', 720: 'MP4 720p', 1080: 'MP4 1080p' };
+            ["mp3", "360", "720", "1080"].forEach(quality => {
+                const href = `https://vkrdownloader.xyz/server/dlbtn.php?q=${encodeURIComponent(quality)}&vkr=${encodeURIComponent(videoSource)}`;
                 downloadContainer.innerHTML += `
-    <iframe style="border: 0; outline: none; display:inline; min-width: 150px; max-height: 45px; height: 45px !important; margin-top: 10px; overflow: hidden;"   sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads"  scrolling="no"
-       src="https://vkrdownloader.xyz/server/dlbtn.php?q=${encodeURIComponent(quality)}&vkr=${encodeURIComponent(videoSource)}">
-       </iframe>`;
+                  <a class="dlbtns" style="background:#6d28d9" href="${href}" target="_blank" rel="noopener noreferrer">${labelMap[quality]}</a>`;
             });
+            // Skip rendering the raw format list for YouTube (per request)
+            return;
         }
-        // Generate download buttons for available formats
-    downloads.forEach(download => {
-            if (download && download.url) {
-                const downloadUrl = download.url;
-                const itag = getParameterByName("itag", downloadUrl);
-                const bgColor = getBackgroundColor(itag);
-                const videoExt = download.format_id || download.ext || 'video';
-                const sizeLabel = (download.size && download.size !== '0 B') ? download.size : '';
-
-const redirectUrl = `https://vkrdownloader.xyz/forcedl?force=${encodeURIComponent(downloadUrl)}`;
-downloadContainer.innerHTML += `
-    <button class="dlbtns" style="background:${bgColor}" onclick="forceDownload('${redirectUrl}', 'video_${itag || 'file'}.mp4')">
-        ${sanitizeContent(videoExt)} ${sizeLabel ? ('- ' + sanitizeContent(sizeLabel)) : ''}
-  </button>
-`;
-
-
-
-            }
-        });
+                // Generate download buttons for available formats (non-YouTube only)
+                const cards = [];
+                downloads.forEach(download => {
+                        if (download && download.url) {
+                                const downloadUrl = download.url;
+                                const itag = getParameterByName("itag", downloadUrl);
+                                const label = download.format_id || download.ext || 'video';
+                                const sizeLabel = (download.size && download.size !== '0 B') ? download.size : '';
+                                const redirectUrl = `https://vkrdownloader.xyz/forcedl?force=${encodeURIComponent(downloadUrl)}`;
+                                cards.push(`
+                                    <div class="dlcard" onclick="forceDownload('${redirectUrl}', 'video_${itag || 'file'}.mp4')">
+                                        <span class="dl-label">${sanitizeContent(label)}</span>
+                                        ${sizeLabel ? `<span class="dl-size">${sanitizeContent(sizeLabel)}</span>` : ''}
+                                    </div>`);
+                        }
+                });
+                if (cards.length) {
+                        downloadContainer.innerHTML += `<div class="download-grid">${cards.join('')}</div>`;
+                }
 
     } else {
         displayError("No download links found or data structure is incorrect.");
