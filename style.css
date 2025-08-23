@@ -207,6 +207,25 @@ footer.footer_v2 {
     .features-grid { grid-template-columns: 1fr; }
 }
 
+/* ================= Android App Promo (Black Section) ================= */
+.b-android { background:#000; color:#fff; padding:64px 0; }
+.b-android .b-heading { max-width: 900px; margin: 0 auto 28px; text-align:center; }
+.b-android .b-heading h2 { font-size: 28px; font-weight: 800; margin: 0 0 12px; }
+.b-android .b-heading p { color:#d6d6d6; margin:0; }
+.feature-2-col { max-width:1100px; margin:0 auto; padding:0 16px; display:grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items:center; }
+.feature-2-col .col-left { display:flex; justify-content:center; }
+.feature-2-col .device-frame img { width: 100%; height: auto; border-radius: 24px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+.feature-2-col .text-box { color:#fff; }
+.l-android { list-style:none; padding:0; margin:0 0 22px; display:flex; flex-direction:column; gap:14px; }
+.l-android--item { display:flex; align-items:flex-start; gap:12px; line-height:1.5; color:#e7e7e7; }
+.l-android--item i { font-size:18px; width:22px; margin-top:2px; }
+.google-button { display:inline-flex; align-items:center; gap:10px; background:#fff; color:#000; border-radius:10px; padding:12px 16px; font-weight:700; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,.35); }
+.google-button:hover { filter:brightness(.95); }
+@media (max-width: 900px){
+    .feature-2-col { grid-template-columns: 1fr; text-align:left; }
+    .b-android .b-heading h2 { font-size:24px; }
+}
+
 /* Responsive styles for smaller screens */
 @media only screen and (max-width: 990px) {
     #inputUrl {
