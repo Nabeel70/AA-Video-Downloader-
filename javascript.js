@@ -164,7 +164,10 @@ function getParameterByName(name, url) {
  * @param {number} retries - Number of retry attempts remaining.
  */
 function makeRequest(inputUrl, retries = 4) {
-    const requestUrl = `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`;
+    // Prefer Netlify function proxy to avoid CORS and hide API shape
+    const proxyUrl = `/.netlify/functions/proxy?vkr=${encodeURIComponent(inputUrl)}`;
+    const directUrl = `https://vkrdownloader.xyz/server?api_key=vkrdownloader&vkr=${encodeURIComponent(inputUrl)}`;
+    const requestUrl = proxyUrl;
     const retryDelay = 2000; // Initial retry delay in milliseconds
     const maxRetries = retries;
 
@@ -177,7 +180,30 @@ function makeRequest(inputUrl, retries = 4) {
         dataType: 'json',
         timeout: 15000, // Extended timeout for slower networks
         success: function (data) {
-            handleSuccessResponse(data, inputUrl);
+            // Some deployments may return raw object or nested under 'data'
+            try {
+                handleSuccessResponse(data, inputUrl);
+            } catch (e) {
+                // Fallback: try calling direct API once if proxy failed to give expected shape
+                if (retries > 0) {
+                    $.ajax({
+                        url: directUrl,
+                        type: 'GET',
+                        dataType: 'json',
+                        timeout: 15000,
+                        success: function (data2) { handleSuccessResponse(data2, inputUrl); },
+                        error: function (xhr2, status2, error2) {
+                            const errMsg = getErrorMessage(xhr2, status2, error2);
+                            console.error(`Direct API error: ${errMsg}`);
+                            displayError('The downloader API is currently unavailable. Please try again shortly.');
+                            document.getElementById("loading").style.display = "none";
+                        },
+                        complete: function () { document.getElementById("downloadBtn").disabled = false; }
+                    });
+                } else {
+                    throw e;
+                }
+            }
         },
         error: function (xhr, status, error) {
             if (retries > 0) {
@@ -290,22 +316,23 @@ function handleSuccessResponse(data, inputUrl) {
     document.getElementById("container").style.display = "block";
     document.getElementById("loading").style.display = "none";
 
-    if (data.data) {
-        const videoData = data.data;
+    // Normalize shape: some endpoints return {data:{...}}, others return {...} directly
+    const videoData = data?.data ? data.data : data;
+    if (videoData && (videoData.downloads || Array.isArray(videoData.formats))) {
+        // VKr API: downloads array; Other API: formats
+        const downloadsArr = videoData.downloads || videoData.formats || [];
         
         // Extract necessary data
-        //const thumbnailUrl = videoData.thumbnail;
-        const downloadUrls = videoData.downloads.map(download => download.url);
-        const videoSource = videoData.source;
+        const downloadUrls = downloadsArr.map(d => d.url || d.source || d.link).filter(Boolean);
+        const videoSource = videoData.source || inputUrl;
         const videoId = getYouTubeVideoIds(videoSource);
         const thumbnailUrl = videoId 
-    ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-    : videoData.thumbnail;
+            ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+            : (videoData.thumbnail || videoData.thumb || videoData.image || "");
         // Construct video HTML
         const videoHtml = `
     <video style='background: black url(${thumbnailUrl}) center center/cover no-repeat; width:100%; height:500px; border-radius:20px;' 
            poster='${thumbnailUrl}' controls playsinline>
-        <source src='${videoData.downloads[5]?.url || ''}' type='video/mp4'>
         ${Array.isArray(downloadUrls) ? downloadUrls.map(url => `<source src='${url}' type='video/mp4'>`).join('') : ''}
         <source src='https://vkrdownloader.xyz/server/dl.php?vkr=${encodeURIComponent(inputUrl)}' type='video/mp4'>
     </video>`;
@@ -331,7 +358,8 @@ function handleSuccessResponse(data, inputUrl) {
         updateElement("duration", durationHtml);
 
         // Generate download buttons
-        generateDownloadButtons(data, inputUrl);
+    // Pass normalized structure to buttons generator
+    generateDownloadButtons({ data: { downloads: downloadsArr, source: videoSource } }, inputUrl);
     } else {
         displayError("Issue: Unable to retrieve the download link. Please check the URL and contact us on Social Media @TheOfficialVKr.");
         document.getElementById("loading").style.display = "none";
@@ -348,7 +376,7 @@ function generateDownloadButtons(videoData, inputUrl) {
     downloadContainer.innerHTML = "";
 
     if (videoData.data) {
-        const downloads = videoData.data.downloads;
+        const downloads = videoData.data.downloads || [];
         const videoSource = videoData.data.source;
 
         // Add YouTube specific button if applicable
@@ -367,13 +395,13 @@ function generateDownloadButtons(videoData, inputUrl) {
             });
         }
         // Generate download buttons for available formats
-        downloads.forEach(download => {
+    downloads.forEach(download => {
             if (download && download.url) {
                 const downloadUrl = download.url;
                 const itag = getParameterByName("itag", downloadUrl);
                 const bgColor = getBackgroundColor(itag);
-                const videoExt = download.format_id;
-                const videoSize = download.size;
+        const videoExt = download.format_id || download.ext || 'video';
+        const videoSize = download.size || '';
 
 const redirectUrl = `https://vkrdownloader.xyz/forcedl?force=${encodeURIComponent(downloadUrl)}`;
 downloadContainer.innerHTML += `
