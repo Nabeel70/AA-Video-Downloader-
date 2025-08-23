@@ -185,6 +185,28 @@ footer.footer_v2 {
 
 /* Add more styling as needed */
 
+/* ================= Features / Marketing Section ================= */
+.features-section { padding: 60px 0; background: #ffffff; }
+.container-zero { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+.section-title { font-weight: 800; font-size: 2rem; text-align: center; padding-bottom: 1rem; margin-top: 0; }
+.section-subtitle { text-align: center; color: #5b5b5b; padding-bottom: 3rem; margin: 0 auto; max-width: 920px; }
+.features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 28px;
+}
+.feature-card { background: #fff; border: 1px solid #eef0f2; border-radius: 14px; padding: 22px; height: 100%; box-shadow: 0 2px 6px rgba(0,0,0,.04); }
+.feature-icon { width: 48px; height: 48px; border-radius: 12px; background: #eafff2; color: #00b871; display: grid; place-items: center; font-size: 22px; margin-bottom: 12px; }
+.feature-title { font-size: 1.05rem; font-weight: 800; margin: 6px 0 6px; }
+.feature-text { color: #5b5b5b; margin: 0; }
+
+@media (max-width: 992px){
+    .features-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px){
+    .features-grid { grid-template-columns: 1fr; }
+}
+
 /* Responsive styles for smaller screens */
 @media only screen and (max-width: 990px) {
     #inputUrl {
